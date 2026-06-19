@@ -1,0 +1,98 @@
+# Monitoring Configuration for Graveboards
+# This file defines monitoring endpoints, metrics, and alerting rules
+
+# Prometheus metrics endpoint
+metrics:
+  enabled: true
+  path: /api/v1/metrics
+  port: 9090
+
+# Health check configuration
+healthcheck:
+  enabled: true
+  endpoint: /api/v1/health
+  interval: 30s
+  timeout: 10s
+  healthy_threshold: 2
+  unhealthy_threshold: 3
+
+# Alerting rules
+alerts:
+  - name: ServiceDown
+    condition: healthcheck_status == "unhealthy"
+    duration: 5m
+    severity: critical
+    message: "Graveboards service is unhealthy"
+    
+  - name: HighLatency
+    condition: response_time > 2000ms
+    duration: 5m
+    severity: warning
+    message: "API response time exceeds threshold"
+    
+  - name: DatabaseConnectionLoss
+    condition: database_status == "error"
+    duration: 1m
+    severity: critical
+    message: "Database connection lost"
+    
+  - name: RedisConnectionLoss
+    condition: redis_status == "error"
+    duration: 1m
+    severity: critical
+    message: "Redis connection lost"
+    
+  - name: HighErrorRate
+    condition: error_rate > 5%
+    duration: 5m
+    severity: warning
+    message: "API error rate exceeds threshold"
+
+# Metrics to expose
+metrics_to_collect:
+  - name: api_requests_total
+    type: counter
+    description: Total number of API requests
+    labels:
+      - method
+      - endpoint
+      - status_code
+      
+  - name: api_request_duration_seconds
+    type: histogram
+    description: API request duration
+    labels:
+      - endpoint
+      
+  - name: database_connections
+    type: gauge
+    description: Number of active database connections
+    
+  - name: redis_connections
+    type: gauge
+    description: Number of active Redis connections
+    
+  - name: cache_hit_rate
+    type: gauge
+    description: Redis cache hit rate percentage
+    
+  - name: error_count
+    type: counter
+    description: Total number of errors
+    labels:
+      - error_type
+      - endpoint
+
+# Resource monitoring
+resources:
+  cpu_threshold: 80
+  memory_threshold: 85
+  disk_threshold: 90
+
+# Logging configuration
+logging:
+  level: INFO
+  format: json
+  include_healthcheck_logs: false
+  max_file_size: 100m
+  max_file_count: 5

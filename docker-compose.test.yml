@@ -1,0 +1,105 @@
+name: graveboards
+
+services:
+    postgresql:
+        image: postgres:16-alpine
+        container_name: graveboards-postgresql
+        environment:
+            - POSTGRES_USERNAME=${POSTGRESQL_USERNAME:-postgres}
+            - POSTGRES_PASSWORD=${POSTGRESQL_PASSWORD:-postgres}
+            - POSTGRES_DATABASE=${POSTGRESQL_DATABASE:-graveboards_test}
+            - POSTGRES_INITDB_ARGS=--auth-host=scram-sha-256
+        volumes:
+            - postgresql-test-data:/var/lib/postgresql/data
+            - ../graveboards-backend/docker-init:/docker-entrypoint-initdb.d:ro
+        networks:
+            - app
+        healthcheck:
+            test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+            interval: 10s
+            timeout: 5s
+            retries: 5
+            start_period: 10s
+        restart: unless-stopped
+        deploy:
+            resources:
+                limits:
+                    cpus: '1'
+                    memory: 2G
+                reservations:
+                    cpus: '0.5'
+                    memory: 1G
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "10m"
+                max-file: "3"
+
+    redis:
+        image: redis:7-alpine
+        container_name: graveboards-redis
+        environment:
+            - REDIS_DB=${REDIS_DB:-15}
+            - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+        volumes:
+            - redis-test-data:/data
+        networks:
+            - app
+        healthcheck:
+            test: [ "CMD", "redis-cli", "ping" ]
+            interval: 10s
+            timeout: 5s
+            retries: 5
+            start_period: 10s
+        restart: unless-stopped
+        deploy:
+            resources:
+                limits:
+                    cpus: '1'
+                    memory: 1G
+                reservations:
+                    cpus: '0.5'
+                    memory: 512M
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "10m"
+                max-file: "3"
+
+    backend:
+        container_name: graveboards-backend
+        build:
+            context: ../graveboards-backend
+            dockerfile: Dockerfile
+        ports:
+            - "8001:8000"
+        env_file:
+            - .env
+        volumes:
+            - instance-test-data:/app/instance
+        healthcheck:
+            test: [ "CMD", "curl", "-f", "http://localhost:8000/api/v1/health" ]
+            interval: 60s
+            timeout: 10s
+            retries: 3
+            start_period: 60s
+        networks:
+            - app
+        environment:
+            - ENV=test
+            - POSTGRESQL_DATABASE=${POSTGRESQL_DATABASE:-graveboards_test}
+            - REDIS_DB=${REDIS_DB:-15}
+            - QUIET=true
+            - DISABLE_SECURITY=false
+        profiles:
+            - test
+        command: [ "python", "-m", "manage", "status" ]
+
+volumes:
+    postgresql-test-data:
+    redis-test-data:
+    instance-test-data:
+
+networks:
+    app:
+        driver: bridge

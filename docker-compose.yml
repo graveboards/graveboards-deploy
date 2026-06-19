@@ -1,0 +1,162 @@
+name: graveboards
+
+services:
+    postgresql:
+        image: postgres:16-alpine
+        container_name: graveboards-postgresql
+        environment:
+            - POSTGRES_USERNAME=${POSTGRESQL_USERNAME:-postgres}
+            - POSTGRES_PASSWORD=${POSTGRESQL_PASSWORD:-postgres}
+            - POSTGRES_DATABASE=${POSTGRESQL_DATABASE:-graveboards_dev}
+            - POSTGRES_INITDB_ARGS=--auth-host=scram-sha-256
+        ports:
+            - "5432:5432"
+        volumes:
+            - postgresql-data:/var/lib/postgresql/data
+            - ../graveboards-backend/docker-init:/docker-entrypoint-initdb.d:ro
+        networks:
+            app:
+                aliases:
+                    - postgres
+        healthcheck:
+            test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+            interval: 10s
+            timeout: 5s
+            retries: 5
+            start_period: 10s
+        restart: unless-stopped
+        deploy:
+            resources:
+                limits:
+                    cpus: '2'
+                    memory: 4G
+                reservations:
+                    cpus: '1'
+                    memory: 2G
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "10m"
+                max-file: "3"
+
+    redis:
+        image: redis:7-alpine
+        container_name: graveboards-redis
+        ports:
+            - "6379:6379"
+        environment:
+            - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+        volumes:
+            - redis-data:/data
+        networks:
+            app:
+                aliases:
+                    - redis
+        healthcheck:
+            test: [ "CMD", "redis-cli", "ping" ]
+            interval: 10s
+            timeout: 5s
+            retries: 5
+            start_period: 10s
+        restart: unless-stopped
+        deploy:
+            resources:
+                limits:
+                    cpus: '1'
+                    memory: 1G
+                reservations:
+                    cpus: '0.5'
+                    memory: 512M
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "10m"
+                max-file: "3"
+
+    backend:
+        container_name: graveboards-backend
+        build:
+            context: ../graveboards-backend
+            dockerfile: Dockerfile
+        env_file:
+            - .env
+        volumes:
+            - ../graveboards-backend/instance:/app/instance
+        networks:
+            app:
+                aliases:
+                    - backend
+        depends_on:
+            postgresql:
+                condition: service_healthy
+            redis:
+                condition: service_healthy
+        ports:
+            - "8000:8000"
+        healthcheck:
+            test: [ "CMD", "curl", "-f", "http://localhost:8000/api/v1/health" ]
+            interval: 60s
+            timeout: 10s
+            retries: 3
+            start_period: 60s
+        security_opt:
+            - no-new-privileges:true
+        read_only: true
+        tmpfs:
+            - /tmp
+            - /app/instance/logs
+        restart: unless-stopped
+        deploy:
+            resources:
+                limits:
+                    cpus: '2'
+                    memory: 4G
+                reservations:
+                    cpus: '1'
+                    memory: 2G
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "10m"
+                max-file: "3"
+
+    frontend:
+        container_name: graveboards-frontend
+        build:
+            context: ../graveboards-frontend
+            target: development
+        env_file:
+            - .env
+        networks:
+            app:
+                aliases:
+                    - frontend
+        environment:
+            - INTERNAL_API_URL=${INTERNAL_API_URL}
+            - SESSION_SECRET=${SESSION_SECRET}
+        depends_on:
+            - backend
+        ports:
+            - "3000:3000"
+        restart: unless-stopped
+        deploy:
+            resources:
+                limits:
+                    cpus: '1'
+                    memory: 2G
+                reservations:
+                    cpus: '0.5'
+                    memory: 1G
+        logging:
+            driver: "json-file"
+            options:
+                max-size: "10m"
+                max-file: "3"
+
+volumes:
+    postgresql-data:
+    redis-data:
+
+networks:
+    app:
+        driver: bridge
