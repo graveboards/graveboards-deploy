@@ -385,26 +385,16 @@ function View-Logs {
 }
 
 function Run-Tests {
-    Write-Info "Running Graveboards tests..."
+    Write-Info "Running Graveboards tests in Docker..."
     
-    # Check if backend directory exists
-    if (-not (Test-Path $BACKEND_DIR)) {
-        Write-Error "Backend directory not found at $BACKEND_DIR"
-        exit 1
-    }
+    Write-Info "Building and running test services (PostgreSQL, Redis, and backend)..."
+    docker-compose -f "$SCRIPT_DIR\docker-compose.test.yml" --profile test up --build -d
     
-    # Check if pytest is available
-    if (-not (Get-Command pytest -ErrorAction SilentlyContinue)) {
-        Write-Warning "pytest not found in PATH. Attempting to use Docker..."
-        
-        # Use Docker to run tests
-        docker-compose -f "$SCRIPT_DIR\docker-compose.test.yml" --profile test run --rm backend
-    } else {
-        # Run tests directly
-        Set-Location $BACKEND_DIR
-        pytest
-        Set-Location $SCRIPT_DIR
-    }
+    Write-Info "Waiting for backend test container to complete..."
+    docker-compose -f "$SCRIPT_DIR\docker-compose.test.yml" logs -f backend
+    
+    Write-Info "Test completed, cleaning up..."
+    docker-compose -f "$SCRIPT_DIR\docker-compose.test.yml" down -v --remove-orphans
 }
 
 function Show-Status {

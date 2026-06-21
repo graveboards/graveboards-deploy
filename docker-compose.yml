@@ -78,6 +78,7 @@ services:
         build:
             context: ../graveboards-backend
             dockerfile: Dockerfile
+            target: runner
         env_file:
             - .env
         volumes:

@@ -4,6 +4,10 @@ services:
     postgresql:
         image: postgres:16-alpine
         container_name: graveboards-postgresql
+        env_file:
+            - ../graveboards-backend/.env.test
+        ports:
+            - "5432:5432"
         environment:
             - POSTGRES_USERNAME=${POSTGRESQL_USERNAME:-postgres}
             - POSTGRES_PASSWORD=${POSTGRESQL_PASSWORD:-postgres}
@@ -38,6 +42,10 @@ services:
     redis:
         image: redis:7-alpine
         container_name: graveboards-redis
+        env_file:
+            - ../graveboards-backend/.env.test
+        ports:
+            - "6379:6379"
         environment:
             - REDIS_DB=${REDIS_DB:-15}
             - REDIS_PASSWORD=${REDIS_PASSWORD:-}
@@ -71,29 +79,34 @@ services:
         build:
             context: ../graveboards-backend
             dockerfile: Dockerfile
-        ports:
-            - "8001:8000"
+            target: test-runner
         env_file:
-            - .env
+            - ../graveboards-backend/.env.test
         volumes:
             - instance-test-data:/app/instance
-        healthcheck:
-            test: [ "CMD", "curl", "-f", "http://localhost:8000/api/v1/health" ]
-            interval: 60s
-            timeout: 10s
-            retries: 3
-            start_period: 60s
         networks:
             - app
         environment:
             - ENV=test
+            - POSTGRESQL_HOST=postgresql
+            - POSTGRESQL_PORT=5432
+            - POSTGRESQL_USERNAME=${POSTGRESQL_USERNAME:-postgres}
+            - POSTGRESQL_PASSWORD=${POSTGRESQL_PASSWORD:-postgres}
             - POSTGRESQL_DATABASE=${POSTGRESQL_DATABASE:-graveboards_test}
+            - REDIS_HOST=redis
+            - REDIS_PORT=6379
             - REDIS_DB=${REDIS_DB:-15}
+            - REDIS_PASSWORD=${REDIS_PASSWORD:-}
             - QUIET=true
             - DISABLE_SECURITY=false
         profiles:
             - test
-        command: [ "python", "-m", "manage", "status" ]
+        depends_on:
+            postgresql:
+                condition: service_healthy
+            redis:
+                condition: service_healthy
+        command: [ "pytest", "-v"]
 
 volumes:
     postgresql-test-data:
