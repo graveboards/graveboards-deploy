@@ -1,4 +1,4 @@
-# Graveyards Backup CronJobs
+# Graveboards Backup CronJobs
 # Add these to your crontab with: crontab -e
 
 # Daily backup at 2:00 AM

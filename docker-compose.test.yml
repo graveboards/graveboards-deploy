@@ -19,7 +19,7 @@ services:
         networks:
             - app
         healthcheck:
-            test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+            test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USERNAME:-postgres}" ]
             interval: 10s
             timeout: 5s
             retries: 5
@@ -47,14 +47,15 @@ services:
         ports:
             - "6379:6379"
         environment:
-            - REDIS_DB=${REDIS_DB:-15}
             - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+        entrypoint: ["/bin/sh", "/entrypoint/redis-entrypoint.sh"]
         volumes:
+            - ./redis-entrypoint.sh:/entrypoint/redis-entrypoint.sh:ro
             - redis-test-data:/data
         networks:
             - app
         healthcheck:
-            test: [ "CMD", "redis-cli", "ping" ]
+            test: [ "CMD-SHELL", "if [ -n \"$REDIS_PASSWORD\" ]; then redis-cli -a \"$REDIS_PASSWORD\" ping; else redis-cli ping; fi" ]
             interval: 10s
             timeout: 5s
             retries: 5

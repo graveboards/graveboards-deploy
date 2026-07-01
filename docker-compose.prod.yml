@@ -15,7 +15,7 @@ services:
         networks:
             - app
         healthcheck:
-            test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+            test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USERNAME:-postgres}" ]
             interval: 10s
             timeout: 5s
             retries: 5
@@ -38,12 +38,16 @@ services:
     redis:
         image: redis:7-alpine
         container_name: graveboards-redis
+        environment:
+            - REDIS_PASSWORD=${REDIS_PASSWORD}
+        entrypoint: ["/bin/sh", "/entrypoint/redis-entrypoint.sh"]
         volumes:
+            - ./redis-entrypoint.sh:/entrypoint/redis-entrypoint.sh:ro
             - redis-prod-data:/data
         networks:
             - app
         healthcheck:
-            test: [ "CMD", "redis-cli", "ping" ]
+            test: [ "CMD-SHELL", "if [ -n \"$REDIS_PASSWORD\" ]; then redis-cli -a \"$REDIS_PASSWORD\" ping; else redis-cli ping; fi" ]
             interval: 10s
             timeout: 5s
             retries: 5
@@ -84,6 +88,16 @@ services:
             - ENV=prod
             - DEBUG=${DEBUG:-false}
             - DISABLE_SECURITY=${DISABLE_SECURITY:-false}
+            - POSTGRESQL_HOST=postgresql
+            - POSTGRESQL_PORT=5432
+            - POSTGRESQL_USERNAME=${POSTGRESQL_USERNAME:-postgres}
+            - POSTGRESQL_PASSWORD=${POSTGRESQL_PASSWORD}
+            - POSTGRESQL_DATABASE=${POSTGRESQL_DATABASE:-graveboards_prod}
+            - REDIS_HOST=redis
+            - REDIS_PORT=6379
+            - REDIS_USERNAME=${REDIS_USERNAME:-}
+            - REDIS_PASSWORD=${REDIS_PASSWORD}
+            - REDIS_DB=${REDIS_DB:-0}
         healthcheck:
             test: [ "CMD", "curl", "-f", "http://localhost:8000/api/v1/health" ]
             interval: 60s

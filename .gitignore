@@ -1,5 +1,7 @@
 # Project files
 .idea
 
-# .env
+# .env files
 .env
+.env.prod
+.env.test

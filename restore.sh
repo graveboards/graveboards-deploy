@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Graveyards Restore Script
+# Graveboards Restore Script
 # Restores PostgreSQL database from backup
 
 set -e
@@ -77,7 +77,7 @@ if [[ "${BYPASS_CONFIRM}" != "true" ]]; then
 fi
 
 # Stop services
-write_info "Stopping Graveyards services..."
+write_info "Stopping Graveboards services..."
 cd "${SCRIPT_DIR}"
 ./deploy.sh down
 
@@ -105,7 +105,7 @@ if [[ -n "${DECOMPRESSED}" ]]; then
 fi
 
 # Start services
-write_info "Starting Graveyards services..."
+write_info "Starting Graveboards services..."
 ./deploy.sh up
 
 write_success "Database restored successfully!"
