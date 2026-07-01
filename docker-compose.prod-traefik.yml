@@ -1,0 +1,52 @@
+# Graveboards Production Deployment - Traefik Override
+# Usage: docker-compose -f docker-compose.prod.yml -f docker-compose.prod-nas.yml -f docker-compose.traefik.yml up
+#
+# This file adds Traefik labels and network configuration for production deployment.
+
+services:
+    postgresql:
+        networks:
+            - app
+            - traefik-proxy
+        labels:
+            - "traefik.enable=false"
+
+    redis:
+        networks:
+            - app
+            - traefik-proxy
+        labels:
+            - "traefik.enable=false"
+
+    backend:
+        networks:
+            - app
+            - traefik-proxy
+        labels:
+            - "traefik.enable=true"
+            - "traefik.docker.network=traefik-proxy"
+            - "traefik.http.routers.graveboards-backend.rule=Host(`graveboards.net`) && PathPrefix(`/api`)"
+            - "traefik.http.routers.graveboards-backend.entrypoints=websecure"
+            - "traefik.http.routers.graveboards-backend.tls=true"
+            - "traefik.http.routers.graveboards-backend.tls.certresolver=letsencrypt"
+            - "traefik.http.services.graveboards-backend.loadbalancer.server.port=8000"
+            - "traefik.http.routers.graveboards-backend.middlewares=security-headers@file,compression@file"
+
+    frontend:
+        networks:
+            - app
+            - traefik-proxy
+        labels:
+            - "traefik.enable=true"
+            - "traefik.docker.network=traefik-proxy"
+            - "traefik.http.routers.graveboards-frontend.rule=Host(`graveboards.net`)"
+            - "traefik.http.routers.graveboards-frontend.entrypoints=websecure"
+            - "traefik.http.routers.graveboards-frontend.tls=true"
+            - "traefik.http.routers.graveboards-frontend.tls.certresolver=letsencrypt"
+            - "traefik.http.services.graveboards-frontend.loadbalancer.server.port=3000"
+            - "traefik.http.routers.graveboards-frontend.middlewares=security-headers@file,compression@file"
+
+networks:
+    traefik-proxy:
+        name: traefik-proxy
+        external: true
