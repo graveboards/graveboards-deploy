@@ -21,16 +21,8 @@ services:
     backend:
         networks:
             - app
-            - traefik-proxy
         labels:
-            - "traefik.enable=true"
-            - "traefik.docker.network=traefik-proxy"
-            - "traefik.http.routers.graveboards-backend.rule=Host(`graveboards.net`) && PathPrefix(`/api`)"
-            - "traefik.http.routers.graveboards-backend.entrypoints=websecure"
-            - "traefik.http.routers.graveboards-backend.tls=true"
-            - "traefik.http.routers.graveboards-backend.tls.certresolver=letsencrypt"
-            - "traefik.http.services.graveboards-backend.loadbalancer.server.port=8000"
-            - "traefik.http.routers.graveboards-backend.middlewares=security-headers@file,compression@file"
+            - "traefik.enable=false"
 
     frontend:
         networks:
