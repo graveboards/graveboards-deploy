@@ -150,6 +150,7 @@ REDIS_DB=0
 NEXT_PUBLIC_API_URL=/api/v1
 INTERNAL_API_URL=http://graveboards-backend:8000/api/v1
 SESSION_SECRET=$SESSION_SECRET
+APP_URL=https://localhost:3000
 EOF
 
     echo

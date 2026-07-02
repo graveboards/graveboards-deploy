@@ -149,6 +149,7 @@ REDIS_DB=0
 NEXT_PUBLIC_API_URL=/api/v1
 INTERNAL_API_URL=http://graveboards-backend:8000/api/v1
 SESSION_SECRET=$SessionSecret
+APP_URL=https://localhost:3000
 "@
 
     Set-Content -Path (Join-Path $SCRIPT_DIR ".env") -Value $envDeployContent
