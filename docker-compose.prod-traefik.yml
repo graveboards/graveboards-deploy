@@ -7,14 +7,12 @@ services:
     postgresql:
         networks:
             - app
-            - traefik-proxy
         labels:
             - "traefik.enable=false"
 
     redis:
         networks:
             - app
-            - traefik-proxy
         labels:
             - "traefik.enable=false"
 
