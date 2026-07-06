@@ -45,11 +45,11 @@ write_error() { printf "${ColorError}[ERROR]${ColorReset} %b\n" "$1"; }
 write_warning() { printf "${ColorWarning}[WARN]${ColorReset} %b\n" "$1"; }
 
 # =========================
-# Step 1: Auto-generate .env files if they don't exist
+# Step 1: Auto-generate .env and bootstrap files if they don't exist
 # =========================
 
-    generate_env_files() {
-    write_info "Environment files not found. Starting interactive setup..."
+    generate_config_files() {
+    write_info "Configuration files not found. Starting interactive setup..."
     echo
 
     # Generate 32-character random alphanumeric secrets
@@ -76,6 +76,120 @@ write_warning() { printf "${ColorWarning}[WARN]${ColorReset} %b\n" "$1"; }
         *) DISABLE_SECURITY="false" ;;
     esac
 
+    # Master queue configuration
+    read -p "Master queue name [Graveboards Queue]: " MASTER_QUEUE_NAME
+    MASTER_QUEUE_NAME="${MASTER_QUEUE_NAME:-Graveboards Queue}"
+
+    read -p "Master queue description [Master queue for beatmaps to receive leaderboards]: " MASTER_QUEUE_DESCRIPTION
+    MASTER_QUEUE_DESCRIPTION="${MASTER_QUEUE_DESCRIPTION:-Master queue for beatmaps to receive leaderboards}"
+
+    # Extra queues
+    declare -a EXTRA_QUEUE_NAMES
+    declare -a EXTRA_QUEUE_DESCRIPTIONS
+    declare -a EXTRA_QUEUE_USER_IDS
+    EXTRA_QUEUE_COUNT=0
+
+    read -p "Add extra queues? (y/N): " add_queues
+    if [[ "$add_queues" =~ ^[yY]$ ]]; then
+        while true; do
+            read -p "  Queue name: " q_name
+            read -p "  Queue description: " q_desc
+            read -p "  Owner user ID: " q_uid
+
+            EXTRA_QUEUE_NAMES[$EXTRA_QUEUE_COUNT]="$q_name"
+            EXTRA_QUEUE_DESCRIPTIONS[$EXTRA_QUEUE_COUNT]="$q_desc"
+            EXTRA_QUEUE_USER_IDS[$EXTRA_QUEUE_COUNT]="$q_uid"
+            EXTRA_QUEUE_COUNT=$((EXTRA_QUEUE_COUNT + 1))
+
+            read -p "  Add another queue? (y/N): " again
+            [[ ! "$again" =~ ^[yY]$ ]] && break
+        done
+    fi
+
+    # Additional admin users
+    declare -a EXTRA_ADMIN_IDS
+    EXTRA_ADMIN_COUNT=0
+
+    read -p "Add additional admin users? (y/N): " add_admins
+    if [[ "$add_admins" =~ ^[yY]$ ]]; then
+        while true; do
+            read -p "  osu user ID: " extra_admin_id
+            EXTRA_ADMIN_IDS[$EXTRA_ADMIN_COUNT]="$extra_admin_id"
+            EXTRA_ADMIN_COUNT=$((EXTRA_ADMIN_COUNT + 1))
+            read -p "  Add another admin? (y/N): " again
+            [[ ! "$again" =~ ^[yY]$ ]] && break
+        done
+    fi
+
+    # --- Generate bootstrap.yaml for dev ---
+    mkdir -p "$BACKEND_DIR/config"
+
+    {
+        echo "master_queue:"
+        echo "  name: \"$MASTER_QUEUE_NAME\""
+        echo "  description: \"$MASTER_QUEUE_DESCRIPTION\""
+        echo "  user_id: $OSU_USER_ID"
+
+        if [[ $EXTRA_QUEUE_COUNT -gt 0 ]]; then
+            echo "extra_queues:"
+            for i in $(seq 0 $((EXTRA_QUEUE_COUNT - 1))); do
+                echo "  - user_id: ${EXTRA_QUEUE_USER_IDS[$i]}"
+                echo "    name: \"${EXTRA_QUEUE_NAMES[$i]}\""
+                echo "    description: \"${EXTRA_QUEUE_DESCRIPTIONS[$i]}\""
+            done
+        else
+            echo "extra_queues: []"
+        fi
+
+        echo "initial_users:"
+        echo "  - user_id: $OSU_USER_ID"
+        echo "    roles: [admin]"
+        echo "    generate_api_key: true"
+        echo "    enable_score_fetcher: true"
+
+        for admin_id in "${EXTRA_ADMIN_IDS[@]}"; do
+            echo "  - user_id: $admin_id"
+            echo "    roles: [admin]"
+            echo "    generate_api_key: true"
+            echo "    enable_score_fetcher: true"
+        done
+
+        echo "initial_roles:"
+        echo "  - admin"
+        echo "setup_steps:"
+        echo "  - create_database"
+        echo "  - seed_roles"
+        echo "  - seed_users"
+        echo "  - seed_api_keys"
+        echo "  - seed_queues"
+    } > "$BACKEND_DIR/config/bootstrap.yaml"
+
+    # --- Generate bootstrap.test.yaml ---
+    {
+        echo "master_queue:"
+        echo "  name: \"Graveboards Queue\""
+        echo "  description: \"Master queue for beatmaps to receive leaderboards\""
+        echo "  user_id: 1"
+        echo "extra_queues: []"
+        echo "initial_users:"
+        echo "  - user_id: 1"
+        echo "    roles: [admin]"
+        echo "    generate_api_key: true"
+        echo "    enable_score_fetcher: true"
+        echo "  - user_id: 2"
+        echo "    roles: [admin]"
+        echo "    generate_api_key: true"
+        echo "    enable_score_fetcher: true"
+        echo "initial_roles:"
+        echo "  - admin"
+        echo "setup_steps:"
+        echo "  - create_database"
+        echo "  - seed_roles"
+        echo "  - seed_users"
+        echo "  - seed_api_keys"
+        echo "  - seed_queues"
+    } > "$BACKEND_DIR/config/bootstrap.test.yaml"
+
     # Create .env for direct Python dev mode (connects to Docker DB/Redis via localhost)
      cat > "$BACKEND_DIR/.env" <<EOF
 DEBUG=true
@@ -84,7 +198,6 @@ ENV=dev
 BASE_URL=http://localhost:3000
 JWT_SECRET_KEY=$JWT_SECRET_KEY
 JWT_ALGORITHM=HS256
-ADMIN_USER_IDS=$OSU_USER_ID,5099768
 OSU_CLIENT_ID=$OSU_CLIENT_ID
 OSU_CLIENT_SECRET=$OSU_CLIENT_SECRET
 POSTGRESQL_HOST=localhost
@@ -107,7 +220,6 @@ ENV=test
 BASE_URL=http://localhost:3000
 JWT_SECRET_KEY=$JWT_SECRET_KEY_TEST
 JWT_ALGORITHM=HS256
-ADMIN_USER_IDS=1,2
 OSU_CLIENT_ID=test-client-id
 OSU_CLIENT_SECRET=test-client-secret
 POSTGRESQL_HOST=localhost
@@ -131,7 +243,6 @@ ENV=dev
 BASE_URL=http://localhost:3000
 JWT_SECRET_KEY=$JWT_SECRET_KEY
 JWT_ALGORITHM=HS256
-ADMIN_USER_IDS=$OSU_USER_ID,5099768
 OSU_CLIENT_ID=$OSU_CLIENT_ID
 OSU_CLIENT_SECRET=$OSU_CLIENT_SECRET
 POSTGRESQL_PASSWORD=postgres
@@ -154,18 +265,26 @@ APP_URL=http://localhost:3000
 EOF
 
     echo
-    write_success "[OK] Environment files created:"
+    write_success "[OK] Configuration files created:"
     echo "  - $BACKEND_DIR/.env (dev mode with localhost DB/Redis)"
     echo "  - $BACKEND_DIR/.env.test (test mode with isolated DB/Redis)"
+    echo "  - $BACKEND_DIR/config/bootstrap.yaml (dev bootstrap config)"
+    echo "  - $BACKEND_DIR/config/bootstrap.test.yaml (test bootstrap config)"
     echo "  - $SCRIPT_DIR/.env (deploy orchestrator config)"
     echo
-    echo "You have been added to ADMIN_USER_IDS as $OSU_USER_ID."
+    echo "You have been added as admin user $OSU_USER_ID."
+    if [[ $EXTRA_QUEUE_COUNT -gt 0 ]]; then
+        echo "  $EXTRA_QUEUE_COUNT extra queue(s) configured."
+    fi
+    if [[ $EXTRA_ADMIN_COUNT -gt 0 ]]; then
+        echo "  $EXTRA_ADMIN_COUNT additional admin user(s) configured."
+    fi
     echo
 }
 
 # Check if .env files exist, generate if not
 if [[ ! -f "$BACKEND_DIR/.env" ]] || [[ ! -f "$SCRIPT_DIR/.env" ]]; then
-    generate_env_files
+    generate_config_files
 fi
 
 # =========================

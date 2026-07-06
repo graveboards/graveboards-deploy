@@ -41,14 +41,14 @@ function Write-Error { Write-Host "[ERROR]" -ForegroundColor $ColorError -NoNewl
 function Write-Warning { Write-Host "[WARN]" -ForegroundColor $ColorWarning -NoNewline; Write-Host " $args" }
 
 # =========================
-# Step 1: Auto-generate .env files if they don't exist
+# Step 1: Auto-generate .env and bootstrap files if they don't exist
 # =========================
 
-function Generate-EnvFiles {
-    Write-Info "Environment files not found. Starting interactive setup..."
+function Generate-ConfigFiles {
+    Write-Info "Configuration files not found. Starting interactive setup..."
     Write-Host ""
 
-    # Generate 32-character random alphanumeric JWT_SECRET_KEY
+    # Generate 32-character random alphanumeric secrets
     $Chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
     $JwtSecretKey = -join ((1..32) | ForEach-Object { $Chars[(Get-Random -Minimum 0 -Maximum $Chars.Length)] })
     $JwtSecretKeyTest = -join ((1..32) | ForEach-Object { $Chars[(Get-Random -Minimum 0 -Maximum $Chars.Length)] })
@@ -72,6 +72,112 @@ function Generate-EnvFiles {
         $DISABLE_SECURITY = "false"
     }
 
+    # Master queue configuration
+    $MasterQueueName = Read-Host "Master queue name [Graveboards Queue]"
+    if (-not $MasterQueueName) { $MasterQueueName = "Graveboards Queue" }
+
+    $MasterQueueDescription = Read-Host "Master queue description [Master queue for beatmaps to receive leaderboards]"
+    if (-not $MasterQueueDescription) { $MasterQueueDescription = "Master queue for beatmaps to receive leaderboards" }
+
+    # Extra queues
+    $ExtraQueues = [System.Collections.Generic.List[object]]::new()
+    $addQueues = Read-Host "Add extra queues? (y/N)"
+    if ($addQueues -eq 'y' -or $addQueues -eq 'Y') {
+        do {
+            $qName = Read-Host "  Queue name"
+            $qDesc = Read-Host "  Queue description"
+            $qUid = Read-Host "  Owner user ID"
+            $ExtraQueues.Add([PSCustomObject]@{ Name = $qName; Description = $qDesc; UserId = $qUid }) | Out-Null
+            $again = Read-Host "  Add another queue? (y/N)"
+        } while ($again -eq 'y' -or $again -eq 'Y')
+    }
+
+    # Additional admin users
+    $ExtraAdmins = [System.Collections.Generic.List[string]]::new()
+    $addAdmins = Read-Host "Add additional admin users? (y/N)"
+    if ($addAdmins -eq 'y' -or $addAdmins -eq 'Y') {
+        do {
+            $extraAdminId = Read-Host "  osu user ID"
+            $ExtraAdmins.Add($extraAdminId) | Out-Null
+            $again = Read-Host "  Add another admin? (y/N)"
+        } while ($again -eq 'y' -or $again -eq 'Y')
+    }
+
+    # --- Generate bootstrap.yaml for dev ---
+    $configDir = Join-Path $BACKEND_DIR "config"
+    if (-not (Test-Path $configDir)) {
+        New-Item -ItemType Directory -Path $configDir | Out-Null
+    }
+
+    $yamlLines = @()
+    $yamlLines += "master_queue:"
+    $yamlLines += "  name: `"$MasterQueueName`""
+    $yamlLines += "  description: `"$MasterQueueDescription`""
+    $yamlLines += "  user_id: $OSU_USER_ID"
+
+    if ($ExtraQueues.Count -gt 0) {
+        $yamlLines += "extra_queues:"
+        foreach ($q in $ExtraQueues) {
+            $yamlLines += "  - user_id: $($q.UserId)"
+            $yamlLines += "    name: `"$($q.Name)`""
+            $yamlLines += "    description: `"$($q.Description)`""
+        }
+    } else {
+        $yamlLines += "extra_queues: []"
+    }
+
+    $yamlLines += "initial_users:"
+    $yamlLines += "  - user_id: $OSU_USER_ID"
+    $yamlLines += "    roles: [admin]"
+    $yamlLines += "    generate_api_key: true"
+    $yamlLines += "    enable_score_fetcher: true"
+
+    foreach ($adminId in $ExtraAdmins) {
+        $yamlLines += "  - user_id: $adminId"
+        $yamlLines += "    roles: [admin]"
+        $yamlLines += "    generate_api_key: true"
+        $yamlLines += "    enable_score_fetcher: true"
+    }
+
+    $yamlLines += "initial_roles:"
+    $yamlLines += "  - admin"
+    $yamlLines += "setup_steps:"
+    $yamlLines += "  - create_database"
+    $yamlLines += "  - seed_roles"
+    $yamlLines += "  - seed_users"
+    $yamlLines += "  - seed_api_keys"
+    $yamlLines += "  - seed_queues"
+
+    $yamlContent = $yamlLines -join "`n"
+    Set-Content -Path (Join-Path $configDir "bootstrap.yaml") -Value $yamlContent
+
+    # --- Generate bootstrap.test.yaml ---
+    $testYaml = @"
+master_queue:
+  name: "Graveboards Queue"
+  description: "Master queue for beatmaps to receive leaderboards"
+  user_id: 1
+extra_queues: []
+initial_users:
+  - user_id: 1
+    roles: [admin]
+    generate_api_key: true
+    enable_score_fetcher: true
+  - user_id: 2
+    roles: [admin]
+    generate_api_key: true
+    enable_score_fetcher: true
+initial_roles:
+  - admin
+setup_steps:
+  - create_database
+  - seed_roles
+  - seed_users
+  - seed_api_keys
+  - seed_queues
+"@
+    Set-Content -Path (Join-Path $configDir "bootstrap.test.yaml") -Value $testYaml
+
     # Create .env for direct Python dev mode (connects to Docker DB/Redis via localhost)
     $envDevContent = @"
 DEBUG=true
@@ -80,7 +186,6 @@ ENV=dev
 BASE_URL=http://localhost:3000
 JWT_SECRET_KEY=$JwtSecretKey
 JWT_ALGORITHM=HS256
-ADMIN_USER_IDS=$OSU_USER_ID,5099768
 OSU_CLIENT_ID=$OSU_CLIENT_ID
 OSU_CLIENT_SECRET=$OSU_CLIENT_SECRET
 POSTGRESQL_HOST=localhost
@@ -105,7 +210,6 @@ ENV=test
 BASE_URL=http://localhost:3000
 JWT_SECRET_KEY=$JwtSecretKeyTest
 JWT_ALGORITHM=HS256
-ADMIN_USER_IDS=1,2
 OSU_CLIENT_ID=test-client-id
 OSU_CLIENT_SECRET=test-client-secret
 POSTGRESQL_HOST=localhost
@@ -131,7 +235,6 @@ ENV=dev
 BASE_URL=http://localhost:3000
 JWT_SECRET_KEY=$JwtSecretKey
 JWT_ALGORITHM=HS256
-ADMIN_USER_IDS=$OSU_USER_ID,5099768
 OSU_CLIENT_ID=$OSU_CLIENT_ID
 OSU_CLIENT_SECRET=$OSU_CLIENT_SECRET
 POSTGRESQL_HOST=postgres
@@ -155,18 +258,26 @@ APP_URL=http://localhost:3000
     Set-Content -Path (Join-Path $SCRIPT_DIR ".env") -Value $envDeployContent
 
     Write-Host ""
-    Write-Success "[OK] Environment files created:"
+    Write-Success "[OK] Configuration files created:"
     Write-Host "  - $(Join-Path $BACKEND_DIR '.env') (dev mode with localhost DB/Redis)"
     Write-Host "  - $(Join-Path $BACKEND_DIR '.env.test') (test mode with isolated DB/Redis)"
+    Write-Host "  - $(Join-Path $configDir 'bootstrap.yaml') (dev bootstrap config)"
+    Write-Host "  - $(Join-Path $configDir 'bootstrap.test.yaml') (test bootstrap config)"
     Write-Host "  - $(Join-Path $SCRIPT_DIR '.env') (deploy orchestrator config)"
     Write-Host ""
-    Write-Host "You have been added to ADMIN_USER_IDS as $OSU_USER_ID."
+    Write-Host "You have been added as admin user $OSU_USER_ID."
+    if ($ExtraQueues.Count -gt 0) {
+        Write-Host "  $($_.Count) extra queue(s) configured."
+    }
+    if ($ExtraAdmins.Count -gt 0) {
+        Write-Host "  $($ExtraAdmins.Count) additional admin user(s) configured."
+    }
     Write-Host ""
 }
 
 # Check if .env files exist, generate if not
 if (-not (Test-Path (Join-Path $BACKEND_DIR ".env"))) {
-    Generate-EnvFiles
+    Generate-ConfigFiles
 }
 
 # =========================
