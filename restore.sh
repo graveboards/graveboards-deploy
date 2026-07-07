@@ -2,6 +2,8 @@
 
 # Graveboards Restore Script
 # Restores PostgreSQL database from backup
+# Usage: restore.sh <backup_file> [--yes]
+#   backup_file can be a relative path (from current directory) or absolute path.
 
 set -e
 
@@ -30,12 +32,10 @@ fi
 if [[ $# -lt 1 ]]; then
     write_error "Usage: $0 <backup_file> [--yes]"
     echo ""
-    echo "Backup files are stored in: backups/"
-    echo ""
     echo "Options:"
     echo "  --yes  Bypass confirmation prompt"
     echo ""
-    write_info "Example: $0 backups/graveboards_backup_YYYYMMDD_HHMMSS.sql.gz --yes"
+    write_info "Example: $0 /path/to/graveboards_backup_20240101_120000.sql.gz --yes"
     exit 1
 fi
 
@@ -46,8 +46,13 @@ if [[ "$2" == "--yes" ]]; then
     BYPASS_CONFIRM=true
 fi
 
+# Resolve backup file path (supports both relative and absolute paths)
+if [[ "${BACKUP_FILE}" != /* ]]; then
+    BACKUP_FILE="$(pwd)/${BACKUP_FILE}"
+fi
+
 # Validate backup file exists
-if [[ ! -f "${SCRIPT_DIR}/${BACKUP_FILE}" ]]; then
+if [[ ! -f "${BACKUP_FILE}" ]]; then
     write_error "Backup file not found: ${BACKUP_FILE}"
     exit 1
 fi
@@ -57,6 +62,12 @@ if [[ "${BACKUP_FILE}" == *.gz ]]; then
     COMPRESSION="gzip"
 else
     COMPRESSION="none"
+fi
+
+# Get Docker Compose network name dynamically
+COMPOSE_NETWORK=$(docker network ls --filter name=graveboards --format "{{.Name}}" 2>/dev/null | head -n1)
+if [[ -z "${COMPOSE_NETWORK}" ]]; then
+    COMPOSE_NETWORK="graveboards_app"
 fi
 
 write_warning "!!! RESTORING BACKUP WILL OVERWRITE EXISTING DATABASE !!!"
@@ -69,7 +80,7 @@ echo ""
 # Confirm restoration
 if [[ "${BYPASS_CONFIRM}" != "true" ]]; then
     read -p "Are you sure you want to restore this backup? (yes/no): " confirm
-    
+
     if [[ "$confirm" != "yes" ]]; then
         write_info "Restore cancelled"
         exit 0
@@ -84,29 +95,17 @@ cd "${SCRIPT_DIR}"
 # Restore database
 write_info "Restoring database from backup..."
 
-# Decompress if needed
 if [[ "${COMPRESSION}" == "gzip" ]]; then
-    DECOMPRESSED=$(mktemp)
-    gunzip -c "${BACKUP_FILE}" > "${DECOMPRESSED}"
-    BACKUP_FILE="${DECOMPRESSED}"
+    gunzip -c "${BACKUP_FILE}" | docker run --rm --network "${COMPOSE_NETWORK}" \
+        -e PGPASSWORD="${POSTGRESQL_PASSWORD}" \
+        postgres:16-alpine \
+        psql -h graveboards-postgresql -U postgres -d "${POSTGRESQL_DATABASE}"
+else
+    docker run --rm --network "${COMPOSE_NETWORK}" \
+        -e PGPASSWORD="${POSTGRESQL_PASSWORD}" \
+        postgres:16-alpine \
+        psql -h graveboards-postgresql -U postgres -d "${POSTGRESQL_DATABASE}" -f "${BACKUP_FILE}"
 fi
-
-# Restore using Docker
-docker run --rm --network graveboards_app \
-    -e PGPASSWORD="${POSTGRESQL_PASSWORD}" \
-    postgres:16-alpine \
-    psql -h graveboards-postgresql -U postgres -d "${POSTGRESQL_DATABASE}" -f /input.sql << EOF
-\i ${BACKUP_FILE}
-EOF
-
-# Cleanup
-if [[ -n "${DECOMPRESSED}" ]]; then
-    rm -f "${DECOMPRESSED}"
-fi
-
-# Start services
-write_info "Starting Graveboards services..."
-./deploy.sh up
 
 write_success "Database restored successfully!"
 write_info "Verify the restoration by checking the service status"

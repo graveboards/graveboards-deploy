@@ -2,11 +2,13 @@
 
 # Graveboards Backup Script
 # Creates automated backups of PostgreSQL database
+# Usage: backup.sh [backup_directory]
+#   If backup_directory is not provided, defaults to ./backups next to this script.
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BACKUP_DIR="${SCRIPT_DIR}/backups"
+BACKUP_DIR="${1:-${SCRIPT_DIR}/backups}"
 DATE=$(date +%Y%m%d_%H%M%S)
 BACKUP_FILE="graveboards_backup_${DATE}.sql.gz"
 MAX_BACKUPS=7
@@ -43,11 +45,14 @@ fi
 mkdir -p "${BACKUP_DIR}"
 
 # Get Docker Compose network name dynamically
-cd "${SCRIPT_DIR}"
-COMPOSE_NETWORK=$(docker-compose network ls --format "{{.Name}}" 2>/dev/null | grep -E "^graveboards" || echo "graveboards_app")
+COMPOSE_NETWORK=$(docker network ls --filter name=graveboards --format "{{.Name}}" 2>/dev/null | head -n1)
+if [[ -z "${COMPOSE_NETWORK}" ]]; then
+    COMPOSE_NETWORK="graveboards_app"
+fi
 
 # Backup command
 write_info "Creating backup: ${BACKUP_FILE}"
+write_info "Backup directory: ${BACKUP_DIR}"
 
 docker run --rm \
     --network "${COMPOSE_NETWORK}" \
@@ -57,10 +62,13 @@ docker run --rm \
 
 write_success "Backup created: ${BACKUP_DIR}/${BACKUP_FILE}"
 
-# Cleanup old backups
-write_info "Cleaning up backups older than ${MAX_BACKUPS} days..."
+# Cleanup: keep only the most recent MAX_BACKUPS files
+write_info "Keeping only the most recent ${MAX_BACKUPS} backups..."
 
-find "${BACKUP_DIR}" -name "graveboards_backup_*.sql.gz" -mtime +${MAX_BACKUPS} -delete
+ls -1t "${BACKUP_DIR}"/graveboards_backup_*.sql.gz 2>/dev/null | tail -n +$((MAX_BACKUPS + 1)) | while read -r old_backup; do
+    write_info "Removing old backup: $(basename "${old_backup}")"
+    rm -f "${old_backup}"
+done
 
 write_success "Old backups cleaned up"
 
