@@ -9,8 +9,8 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKUP_DIR="${1:-${SCRIPT_DIR}/backups}"
-DATE=$(date +%Y%m%d_%H%M%S)
-BACKUP_FILE="graveboards_backup_${DATE}.sql.gz"
+DATE=$(date +%Y-%m-%d_%H-%M-%S)
+BACKUP_FILE="graveboards_${DATE}.sql.gz"
 MAX_BACKUPS=7
 
 # Colors
@@ -65,7 +65,7 @@ write_success "Backup created: ${BACKUP_DIR}/${BACKUP_FILE}"
 # Cleanup: keep only the most recent MAX_BACKUPS files
 write_info "Keeping only the most recent ${MAX_BACKUPS} backups..."
 
-ls -1t "${BACKUP_DIR}"/graveboards_backup_*.sql.gz 2>/dev/null | tail -n +$((MAX_BACKUPS + 1)) | while read -r old_backup; do
+ls -1t "${BACKUP_DIR}"/graveboards_*.sql.gz 2>/dev/null | tail -n +$((MAX_BACKUPS + 1)) | while read -r old_backup; do
     write_info "Removing old backup: $(basename "${old_backup}")"
     rm -f "${old_backup}"
 done
