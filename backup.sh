@@ -65,12 +65,20 @@ write_success "Backup created: ${BACKUP_DIR}/${BACKUP_FILE}"
 # Cleanup: keep only the most recent MAX_BACKUPS files
 write_info "Keeping only the most recent ${MAX_BACKUPS} backups..."
 
-ls -1t "${BACKUP_DIR}"/graveboards_*.sql.gz 2>/dev/null | tail -n +$((MAX_BACKUPS + 1)) | while read -r old_backup; do
-    write_info "Removing old backup: $(basename "${old_backup}")"
-    rm -f "${old_backup}"
-done
+old_backups=()
+while IFS= read -r line; do
+    old_backups+=("$line")
+done < <(ls -1t "${BACKUP_DIR}"/graveboards_*.sql.gz 2>/dev/null | tail -n +$((MAX_BACKUPS + 1)))
 
-write_success "Old backups cleaned up"
+if [[ ${#old_backups[@]} -gt 0 ]]; then
+    for old_backup in "${old_backups[@]}"; do
+        write_info "Removing old backup: $(basename "${old_backup}")"
+        rm -f "${old_backup}"
+    done
+    write_success "Removed ${#old_backups[@]} old backup(s), ${MAX_BACKUPS} kept"
+else
+    write_info "No old backups to clean up"
+fi
 
 # Verification
 if [[ -f "${BACKUP_DIR}/${BACKUP_FILE}" ]]; then
