@@ -30,12 +30,41 @@ cd graveboards-deploy
 
 ---
 
+## Commands
+
+```bash
+cd graveboards-deploy
+./deploy.sh up [mode]               # Start services
+./deploy.sh down [mode]             # Stop services
+./deploy.sh logs [mode] [service]   # View logs
+./deploy.sh test                    # Run tests
+./deploy.sh build [mode]            # Build images
+./deploy.sh status                  # Show status
+./deploy.sh clean                   # Remove volumes and images
+./deploy.sh help                    # Show help
+```
+
+**Modes:**
+- `dev`      - Development (default, hot-reload)
+- `prod`     - Production (Docker named volumes)
+- `prod-nas` - Production (NAS/external mounts)
+- `test`     - Testing (isolated DB/Redis, runs pytest)
+
+**Services (for logs):**
+- `all` - All services (default)
+- `backend` - Backend service
+- `frontend` - Frontend service
+- `postgres` - PostgreSQL database
+- `redis` - Redis cache
+
+---
+
 ## Docker Build
 
 This project uses a multi-stage Dockerfile with separate stages for development and production:
 
-- **development** - Full Node.js environment with hot-reload support
-- **production** - Optimized image with minified static output
+- **development** - Full Node.js environment with hot-reload support (`npm run dev`)
+- **production** - Optimized image with standalone output (`next start`)
 
 ### Build Commands
 
@@ -54,32 +83,6 @@ docker build --target development -t frontend:dev graveboards-frontend/
 docker build --target production -t frontend:latest graveboards-frontend/
 ```
 
-## Commands
-
-```bash
-cd graveboards-deploy
-./deploy.sh up [mode]               # Start services
-./deploy.sh down [mode]             # Stop services
-./deploy.sh logs [mode] [service]   # View logs
-./deploy.sh test                    # Run tests
-./deploy.sh build [mode]            # Build images
-./deploy.sh status                  # Show status
-./deploy.sh clean                   # Remove volumes and images
-```
-
-**Modes:**
-- `dev`      - Development (default)
-- `prod`     - Production (Docker volumes)
-- `prod-nas` - Production (NAS volumes)
-- `test`     - Testing
-
-**Services:**
-- `all` - All services (default)
-- `backend` - Backend service
-- `frontend` - Frontend service
-- `postgres` - PostgreSQL database
-- `redis` - Redis cache
-
 ---
 
 ## Monitoring
@@ -92,7 +95,7 @@ All services have built-in health checks:
 # Backend health endpoint
 curl http://localhost:8000/api/v1/health
 
-# Frontend health endpoint  
+# Frontend health endpoint
 curl http://localhost:3000
 ```
 
@@ -114,12 +117,22 @@ curl http://localhost:3000
 ### Backups
 
 ```bash
-./backup.sh          # Manual backup
-crontab -e          # Add automated backup (see docs/PRODUCTION_DEPLOYMENT.md)
-./restore.sh <file> # Restore from backup
+./backup.sh [backup_dir]    # Manual backup (keeps 7 most recent)
+crontab -e                  # Add automated backup (see crontab.example)
+./restore.sh <backup_file>  # Restore from backup
 ```
 
-## Documentation
+### Systemd Service
+
+```bash
+./setup-service.sh          # Interactive setup for systemd service
+```
+
+### Environment Validation
+
+```bash
+./env-validator.sh          # Validate environment configuration
+```
 
 ---
 
@@ -127,38 +140,38 @@ crontab -e          # Add automated backup (see docs/PRODUCTION_DEPLOYMENT.md)
 
 ### Environment Files
 
-| File                | Purpose                         |
-|---------------------|---------------------------------|
-| `.env`              | Primary config                  |
-| `.env.example`      | Template for creating `.env`    |
-| `.env.prod.example` | Production environment template |
-| `.env.test.example` | Test environment template       |
+| File                  | Purpose                         |
+|-----------------------|---------------------------------|
+| `.env`                | Primary config (auto-generated) |
+| `.env.example`        | Template for creating `.env`    |
+| `.env.prod.example`   | Production environment template |
+| `.env.test.example`   | Test environment template       |
 
 **How to set up:**
 
-1. **Development** - Run `./deploy.sh up dev` first, it auto-generates `.env`
+1. **Development** - Run `./deploy.sh up dev` first; it auto-generates `.env` with interactive prompts
 2. **Production** - Copy `.env.prod.example` to `.env.prod` and fill in production values
 
 ### Storage Configuration
 
 Production deployments require volume configuration for persistent data. Choose between:
 
-- **Docker volumes** (default, easy): Uses named Docker volumes
-- **NAS mounts** (recommended for production): Mount external storage
+- **Docker volumes** (default, easy): Uses named Docker volumes (`postgresql-prod-data`, `redis-prod-data`, `instance-prod-data`)
+- **NAS mounts** (recommended for production): Mount external storage via `docker-compose.prod-nas.yml`
 
 See [Production Deployment Guide](./docs/PRODUCTION_DEPLOYMENT.md#volume-configuration) for details.
 
 **Required Variables:**
-- `SESSION_SECRET` Frontend session signing (32+ chars)
+- `SESSION_SECRET` - Frontend session signing key (32+ chars)
 - `JWT_SECRET_KEY` - JWT signing key (32+ chars)
 - `OSU_CLIENT_ID`, `OSU_CLIENT_SECRET` - osu! OAuth credentials
 - `ADMIN_USER_IDS` - Comma-separated osu! user IDs
 - `POSTGRESQL_PASSWORD` - PostgreSQL password
-- `POSTGRESQL_DATABASE` - Database name (default: graveboards_prod)
+- `POSTGRESQL_DATABASE` - Database name (default: `graveboards_prod`)
 
 **Volume Variables (optional, defaults configured):**
 - `POSTGRESQL_DATA_PATH` - PostgreSQL data directory
-- `REDIS_DATA_PATH` - Redis data directory  
+- `REDIS_DATA_PATH` - Redis data directory
 - `INSTANCE_DATA_PATH` - Backend instance directory
 
 ---

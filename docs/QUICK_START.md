@@ -21,9 +21,9 @@ cd graveboards-deploy
 ```
 
 This will:
+- Prompt for osu! OAuth credentials, admin user ID, and optional extra queues/users
 - Create `.env` files with auto-generated secrets
 - Start all services (PostgreSQL, Redis, Backend, Frontend)
-- Provide configuration for local development
 - Build frontend with hot-reload support
 
 ### 3. Verify Installation
@@ -44,18 +44,29 @@ curl http://localhost:3000
 ./deploy.sh down
 
 # View logs
-./deploy.sh logs [dev|prod|test] [service]
+./deploy.sh logs [dev|prod|prod-nas|test] [backend|frontend|postgres|redis|all]
 
 # Restart
 ./deploy.sh up dev
 ```
 
-### 5. Docker Build Options
+### 5. Run Tests
 
-The frontend uses a multi-stage Dockerfile with two stages:
+```bash
+# Via orchestrator (isolated DB/Redis)
+./deploy.sh test
+
+# Via backend Makefile
+cd graveboards-backend
+make test
+```
+
+### 6. Docker Build Options
+
+The frontend uses a multi-stage Dockerfile with two main stages:
 
 - **development** - Full Node.js environment with `npm run dev` (hot-reload)
-- **production** - Optimized image with static output (standalone mode)
+- **production** - Optimized image with standalone output (`next start`)
 
 ```bash
 # Build development image
@@ -65,8 +76,8 @@ The frontend uses a multi-stage Dockerfile with two stages:
 ./deploy.sh build prod
 
 # Direct Docker builds:
-docker build --target development -t myapp:dev .
-docker build --target production -t myapp:latest .
+docker build --target development -t frontend:dev graveboards-frontend/
+docker build --target production -t frontend:latest graveboards-frontend/
 ```
 
 ---
@@ -77,7 +88,7 @@ docker build --target production -t myapp:latest .
 
 - Server with Docker Engine 24+
 - 4GB+ RAM recommended
-- Domain name (for HTTPS)
+- Domain name (for HTTPS via Traefik)
 
 ### 2. Clone and Setup
 
@@ -92,12 +103,11 @@ cd graveboards-deploy
 ### 3. Configure Environment
 
 ```bash
-# Create .env file (interactive setup)
-./deploy.sh up dev
+# Create .env.prod from template
+cp .env.prod.example .env.prod
 
-# Or manually create .env with production values
-cp .env.example .env
-vim .env
+# Edit with production values
+vim .env.prod
 ```
 
 **Important: Change these values for production:**
@@ -119,30 +129,58 @@ BASE_URL=https://your-domain.com
 ### 5. Deploy to Production
 
 ```bash
+# Build images
 ./deploy.sh build prod
+
+# Start services (Docker volumes)
 ./deploy.sh up prod
+
+# Or with NAS volumes
+docker-compose -f docker-compose.prod.yml -f docker-compose.prod-nas.yml up -d
 ```
 
-### 6. Set Up HTTPS (Recommended)
+### 6. Set Up HTTPS with Traefik (Recommended)
+
+Use the Traefik override for automatic Let's Encrypt TLS:
 
 ```bash
-# Install certbot
-sudo apt install certbot python3-certbot-nginx
-
-# Get certificate
-sudo certbot --nginx -d your-domain.com
+# Start with Traefik (update domain in docker-compose.prod-traefik.yml)
+docker-compose -f docker-compose.prod.yml -f docker-compose.prod-traefik.yml up -d
 ```
+
+The Traefik configuration includes:
+- Automatic TLS certificate provisioning via Let's Encrypt
+- Security headers (HSTS, CSP, X-Frame-Options, etc.)
+- Rate limiting (10 req/s)
+- WebSocket support
 
 ### 7. Set Up Backups
 
 ```bash
-# Test backup
+# Test backup (default: stores in ./backups next to this script)
 ./backup.sh
 
-# Add to crontab for automated backups
+# Or specify a custom backup directory
+./backup.sh /path/to/backups
+
+# Add to crontab for automated backups (see crontab.example)
 crontab -e
-# Add: 0 2 * * * cd ~/graveboards-deploy && ./backup.sh >> /var/log/graveboards-backup.log 2>&1
+# Add: 0 2 * * * /path/to/graveboards-deploy/backup.sh /path/to/backups >> /var/log/graveboards-backup.log 2>&1
 ```
+
+### 8. Set Up Systemd Service (Optional)
+
+For automatic startup on boot:
+
+```bash
+./setup-service.sh
+```
+
+This interactive script will:
+- Choose compose configuration (prod, prod-nas, prod-traefik)
+- Set environment variables
+- Choose system-wide or user-level systemd
+- Generate and install the service file
 
 ## Common Tasks
 
@@ -159,7 +197,7 @@ git pull
 ### View Logs
 
 ```bash
-./deploy.sh logs [dev|prod|test] [service]
+./deploy.sh logs [dev|prod|prod-nas|test] [backend|frontend|postgres|redis|all]
 ```
 
 **Examples:**
@@ -175,11 +213,25 @@ git pull
 ```bash
 # Reset database (dev only!)
 ./deploy.sh down dev
-docker-compose down -v
+docker compose -f docker-compose.yml down -v
 
 # View database status
-./deploy.sh shell
-# Inside container: python -m manage status
+docker compose -f docker-compose.yml exec backend python -m manage status
+
+# Seed database
+docker compose -f docker-compose.yml exec backend python -m manage seed all
+```
+
+### Interactive Shell
+
+Use Docker Compose directly:
+
+```bash
+# Backend shell
+docker compose -f docker-compose.yml exec backend sh
+
+# PostgreSQL shell
+docker compose -f docker-compose.yml exec postgresql psql -U postgres
 ```
 
 ## Troubleshooting
@@ -202,23 +254,11 @@ cd graveboards-deploy
 ./deploy.sh clean
 ```
 
-### Interactive Shell
-
-**Note:** The `shell` command has been removed. Use Docker Compose directly:
-
-```bash
-# Backend shell
-docker exec -it graveboards-backend sh
-
-# Frontend shell (in frontend directory)
-npm run dev
-```
-
 ## Next Steps
 
 1. Configure osu! OAuth callback URL
-2. Set up domain DNS
-3. Configure SSL/TLS
-4. Set up monitoring
+2. Set up domain DNS pointing to your server
+3. Configure Traefik with your domain in `docker-compose.prod-traefik.yml`
+4. Set up monitoring (see `monitoring.yml`)
 5. Configure backups
 6. Review security checklist in docs/PRODUCTION_DEPLOYMENT.md

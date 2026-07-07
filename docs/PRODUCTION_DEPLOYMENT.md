@@ -2,7 +2,7 @@
 
 ## Overview
 
-This guide provides step-by-step instructions for deploying Graveboards in a production environment using Docker Compose.
+This guide provides step-by-step instructions for deploying Graveboards in a production environment using Docker Compose with Traefik as a reverse proxy for HTTPS.
 
 ## Prerequisites
 
@@ -15,8 +15,6 @@ This guide provides step-by-step instructions for deploying Graveboards in a pro
 ### Software Requirements
 - Docker Engine 24+
 - Docker Compose 2.0+
-- Node.js 22+ (for frontend builds, optional)
-- Python 3.14+ (for backend development, optional)
 - `git` for repository management
 
 ## Deployment Steps
@@ -39,11 +37,11 @@ git clone https://github.com/graveboards/graveboards-deploy.git
 ```bash
 cd ~/graveboards/graveboards-deploy
 
-# Create .env file from template
-cp .env.prod.example .env.prod
+# Create .env from template
+cp .env.example .env
 
-# Edit .env.prod with production values
-vim .env.prod
+# Edit .env with production values
+vim .env
 ```
 
 **Required Production Environment Variables:**
@@ -55,15 +53,12 @@ JWT_SECRET_KEY=<generate-with-openssl-rand-base64-32>
 POSTGRESQL_PASSWORD=<generate-with-openssl-rand-base64-32>
 
 # Mode settings
+ENV=prod
 DEBUG=false
 DISABLE_SECURITY=false
-ENV=prod
 
 # Database
 POSTGRESQL_DATABASE=graveboards_prod
-
-# Admin users (comma-separated osu! user IDs)
-ADMIN_USER_IDS=<your-osu-user-id>
 
 # osu! API credentials
 OSU_CLIENT_ID=<your-client-id>
@@ -106,7 +101,7 @@ sudo mount -t cifs //your-nas-ip/share /mnt/nas/graveboards -o credentials=/etc/
 echo "your-nas-ip:/path/to/share /mnt/nas/graveboards nfs defaults 0 0" | sudo tee -a /etc/fstab
 ```
 
-**Step 2: Configure volume paths in `.env.prod`**
+**Step 2: Configure volume paths in `.env`**
 
 ```env
 # Data paths (absolute paths to NAS mount)
@@ -131,7 +126,7 @@ Use the NAS-specific docker-compose configuration:
 ./deploy.sh build prod
 
 # Start services with NAS volumes
-docker-compose -f docker-compose.prod.yml -f docker-compose.prod-nas.yml up -d
+docker compose -f docker-compose.prod.yml -f docker-compose.prod-nas.yml up -d
 ```
 
 **Note:** The `docker-compose.prod-nas.yml` file overrides the default volume paths with your NAS configuration. It should be used in combination with `docker-compose.prod.yml` using the `-f` flag.
@@ -169,10 +164,29 @@ chmod +x env-validator.sh
 ./deploy.sh build prod
 
 # Start services with NAS volumes
-docker-compose -f docker-compose.prod.yml -f docker-compose.prod-nas.yml up -d
+docker compose -f docker-compose.prod.yml -f docker-compose.prod-nas.yml up -d
 ```
 
 **Note:** For NAS deployments, ensure your `.env.prod` file has the `POSTGRESQL_DATA_PATH`, `REDIS_DATA_PATH`, and `INSTANCE_DATA_PATH` variables set to your NAS mount points (e.g., `/mnt/nas/graveboards/postgresql`).
+
+### HTTPS with Traefik
+
+For automatic TLS via Let's Encrypt, use the Traefik override:
+
+```bash
+# 1. Update the domain in docker-compose.prod-traefik.yml
+vim docker-compose.prod-traefik.yml
+
+# 2. Start with Traefik
+docker compose -f docker-compose.prod.yml -f docker-compose.prod-traefik.yml up -d
+```
+
+The Traefik configuration provides:
+- Automatic TLS certificate provisioning (Let's Encrypt)
+- Security headers (HSTS, CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy)
+- Rate limiting (10 requests/second)
+- WebSocket support
+- HTTP-to-HTTPS redirect
 
 ### Docker Multi-Stage Build
 
@@ -187,8 +201,8 @@ Build targets are automatically selected based on mode:
 
 You can also build directly:
 ```bash
-docker build --target development -t frontend:dev .
-docker build --target production -t frontend:latest .
+docker build --target development -t frontend:dev graveboards-frontend/
+docker build --target production -t frontend:latest graveboards-frontend/
 ```
 
 ### 5. Verify Deployment
@@ -198,7 +212,7 @@ docker build --target production -t frontend:latest .
 ./deploy.sh status
 
 # View logs
-./deploy.sh logs
+./deploy.sh logs prod all
 
 # Test health endpoint
 curl -f http://localhost:8000/api/v1/health
@@ -209,32 +223,20 @@ curl -f http://localhost:3000
 
 ## Security Hardening
 
-### 1. Enable HTTPS with Let's Encrypt
+### 1. Enable HTTPS with Traefik (Recommended)
 
-Install certbot:
+Configure `docker-compose.prod-traefik.yml` with your domain:
 
-```bash
-sudo apt update
-sudo apt install certbot python3-certbot-nginx
+```yaml
+# In docker-compose.prod-traefik.yml, set:
+# traefik.http.routers.graveboards-frontend.rule=Host(`graveboards.example.com`)
 ```
 
-Obtain certificate:
+Traefik handles Let's Encrypt certificate provisioning automatically. No manual certbot setup required.
 
-```bash
-sudo certbot --nginx -d graveboards.example.com
-```
+### 2. Secure Docker
 
-### 2. Configure Firewall
-
-```bash
-sudo ufw allow OpenSSH
-sudo ufw allow 'Nginx Full'
-sudo ufw enable
-```
-
-### 3. Secure Docker
-
-Create dedicated user:
+Create a dedicated user:
 
 ```bash
 sudo useradd -r -s /bin/false graveboards
@@ -247,7 +249,7 @@ Set proper permissions:
 sudo chown -R graveboards:graveboards ~/graveboards
 ```
 
-### 4. Enable Automatic Updates
+### 3. Enable Automatic Updates
 
 ```bash
 # Enable unattended upgrades
@@ -261,8 +263,7 @@ sudo dpkg-reconfigure -plow unattended-upgrades
 
 The deployment includes automatic health checks:
 
-- Backend: `/api/v1/health` (every 30s)
-- Frontend: HTTP 200 check (every 30s)
+- Backend: `/api/v1/health` (every 60s)
 - PostgreSQL: `pg_isready` (every 10s)
 - Redis: `redis-cli ping` (every 10s)
 
@@ -272,7 +273,7 @@ View logs:
 
 ```bash
 # All services
-./deploy.sh logs [dev|prod|test] all
+./deploy.sh logs [dev|prod|prod-nas|test] all
 
 # Specific service
 ./deploy.sh logs prod backend
@@ -281,12 +282,17 @@ View logs:
 ./deploy.sh logs prod redis
 
 # Follow logs
-./deploy.sh logs prod backend
+./deploy.sh logs prod backend -f
 ```
 
-### Metrics
+### Monitoring Configuration
 
-Metrics are available at `/api/v1/health` (basic) or configured Prometheus endpoint.
+A `monitoring.yml` file defines alerting rules for:
+- Service down (5m critical)
+- High latency (2000ms warning)
+- Database connection loss (1m critical)
+- Redis connection loss (1m critical)
+- High error rate (>5% warning)
 
 ## Backups
 
@@ -294,28 +300,76 @@ Metrics are available at `/api/v1/health` (basic) or configured Prometheus endpo
 
 ```bash
 cd ~/graveboards/graveboards-deploy
-chmod +x backup.sh
+
+# Default: stores in ./backups next to this script
 ./backup.sh
+
+# Or specify a custom backup directory
+./backup.sh /path/to/backups
 ```
+
+Backups are stored as `graveboards_backup_YYYYMMDD_HHMMSS.sql.gz` and the script keeps the 7 most recent backups.
 
 ### Automated Backup (Cron)
 
-Add to crontab:
+See `crontab.example` for a ready-to-use cron configuration:
 
 ```bash
 crontab -e
 
-# Add: Daily backup at 2:00 AM
-0 2 * * * cd ~/graveboards/graveboards-deploy && ./backup.sh >> /var/log/graveboards-backup.log 2>&1
+# Daily backup at 2:00 AM (backups stored in /path/to/backups)
+0 2 * * * /path/to/graveboards-deploy/backup.sh /path/to/backups >> /var/log/graveboards-backup.log 2>&1
 ```
 
 ### Restore from Backup
 
 ```bash
 cd ~/graveboards/graveboards-deploy
-chmod +x restore.sh
+
+# Restore from a backup file (supports relative or absolute paths)
 ./restore.sh backups/graveboards_backup_YYYYMMDD_HHMMSS.sql.gz --yes
 ```
+
+The restore process will:
+1. Prompt for confirmation (use `--yes` to skip)
+2. Stop all services
+3. Restore the database
+4. Restart services
+
+## Systemd Service
+
+For automatic startup on boot, use the interactive service generator:
+
+```bash
+./setup-service.sh
+```
+
+This script will:
+1. Select compose configuration (prod, prod-nas, prod-traefik)
+2. Configure environment variables
+3. Choose between system-wide (sudo) or user-level systemd
+4. Generate and install the service file
+5. Optionally enable on boot and start the service
+
+### Service Management
+
+```bash
+# System-wide
+sudo systemctl start graveboards
+sudo systemctl stop graveboards
+sudo systemctl restart graveboards
+sudo systemctl status graveboards
+sudo journalctl -u graveboards -f
+
+# User-level
+systemctl --user start graveboards
+systemctl --user stop graveboards
+systemctl --user restart graveboards
+systemctl --user status graveboards
+journalctl --user -u graveboards -f
+```
+
+**Note:** For container logs, use `docker compose logs` instead of journalctl, since the systemd service is a oneshot wrapper that starts the containers.
 
 ## Maintenance
 
@@ -339,10 +393,10 @@ git pull
 
 ```bash
 # Stop services
-docker-compose -f docker-compose.prod.yml -f docker-compose.prod-nas.yml down
+docker compose -f docker-compose.prod.yml -f docker-compose.prod-nas.yml down
 
 # Restart with NAS
-docker-compose -f docker-compose.prod.yml -f docker-compose.prod-nas.yml up -d
+docker compose -f docker-compose.prod.yml -f docker-compose.prod-nas.yml up -d
 ```
 
 ### View Service Status
@@ -411,7 +465,6 @@ docker exec -it graveboards-redis redis-cli DBSIZE
 
 ```bash
 # Clear frontend cache
-rm -rf ~/.next
 rm -rf graveboards-frontend/.next
 
 # Rebuild with target
@@ -425,10 +478,10 @@ docker build --target production -t frontend:latest graveboards-frontend/
 
 ```bash
 # Check environment
-./deploy.sh shell
+docker compose -f docker-compose.prod.yml exec backend python -m manage status
 
 # Verify config
-grep -E "^(JWT_SECRET_KEY|POSTGRES|REDIS)" .env
+grep -E "^(JWT_SECRET_KEY|POSTGRESQL|REDIS)" .env.prod
 ```
 
 ## Scaling
@@ -438,7 +491,7 @@ grep -E "^(JWT_SECRET_KEY|POSTGRES|REDIS)" .env
 For higher traffic, consider:
 
 1. **Database Read Replicas**: Add PostgreSQL read replicas for load balancing
-2. **Load Balancer**: Use nginx or HAProxy for frontend load balancing
+2. **Load Balancer**: Use Traefik or HAProxy for frontend load balancing
 3. **Multiple Backend Instances**: Run multiple backend containers behind load balancer
 
 ### Vertical Scaling
@@ -456,23 +509,23 @@ backend:
 
 ## Security Checklist
 
-- [ ] Changed all default secrets
-- [ ] Enabled HTTPS with valid certificate
+- [ ] Changed all default secrets (SESSION_SECRET, JWT_SECRET_KEY, POSTGRESQL_PASSWORD)
+- [ ] Enabled HTTPS with Traefik (valid certificate auto-provisioned)
 - [ ] Disabled DEBUG mode
 - [ ] Disabled DISABLE_SECURITY
-- [ ] Configured firewall rules
+- [ ] Set up Traefik with your domain in `docker-compose.prod-traefik.yml`
 - [ ] Set up automatic backups
 - [ ] Enabled health checks
-- [ ] Configured logging
-- [ ] Created monitoring alerts
+- [ ] Configured logging (json-file driver, 10m max, 3 files)
+- [ ] Created monitoring alerts (see `monitoring.yml`)
 - [ ] Updated osu! API callback URL
-- [ ] Set up rate limiting
+- [ ] Set up rate limiting (configured in Traefik, 10 req/s)
 - [ ] Configured CORS headers
 
 ## Support
 
 For issues or questions:
-- Check logs: `./deploy.sh logs`
+- Check logs: `./deploy.sh logs prod`
 - Run diagnostics: `./env-validator.sh`
 - Review documentation in `docs/` subdirectories
 
@@ -481,8 +534,8 @@ For issues or questions:
 After successful deployment:
 
 1. Configure DNS to point to your server
-2. Set up SSL certificate
-3. Configure monitoring (optional)
+2. Set up Traefik with your domain (see HTTPS section above)
+3. Configure monitoring (see `monitoring.yml`)
 4. Test OAuth flow
 5. Create first user account
 6. Set up regular backups
