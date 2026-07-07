@@ -308,7 +308,7 @@ cd ~/graveboards/graveboards-deploy
 ./backup.sh /path/to/backups
 ```
 
-Backups are stored as `graveboards_backup_YYYYMMDD_HHMMSS.sql.gz` and the script keeps the 7 most recent backups.
+Backups are stored as `graveboards_YYYY-MM-DD_HH-MM-SS.sql.gz` and the script keeps the 7 most recent backups.
 
 ### Automated Backup (Cron)
 
@@ -327,7 +327,7 @@ crontab -e
 cd ~/graveboards/graveboards-deploy
 
 # Restore from a backup file (supports relative or absolute paths)
-./restore.sh backups/graveboards_backup_YYYYMMDD_HHMMSS.sql.gz --yes
+./restore.sh backups/graveboards_2026-07-06_22-30-45.sql.gz --yes
 ```
 
 The restore process will:

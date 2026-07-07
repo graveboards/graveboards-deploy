@@ -35,7 +35,7 @@ if [[ $# -lt 1 ]]; then
     echo "Options:"
     echo "  --yes  Bypass confirmation prompt"
     echo ""
-    write_info "Example: $0 /path/to/graveboards_backup_20240101_120000.sql.gz --yes"
+    write_info "Example: $0 /path/to/graveboards_2026-07-06_22-30-45.sql.gz --yes"
     exit 1
 fi
 
