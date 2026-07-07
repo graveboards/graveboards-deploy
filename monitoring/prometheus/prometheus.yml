@@ -1,0 +1,33 @@
+global:
+    scrape_interval: 15s
+    evaluation_interval: 15s
+    scrape_timeout: 10s
+
+    external_labels:
+        cluster: graveboards
+        environment: prod
+
+rule_files:
+    - alerts.yml
+
+scrape_configs:
+    - job_name: graveboards-backend
+      metrics_path: /api/v1/metrics
+      static_configs:
+          - targets:
+              - graveboards-backend:8000
+
+    - job_name: prometheus
+      static_configs:
+          - targets:
+              - localhost:9090
+
+    - job_name: alertmanager
+      static_configs:
+          - targets:
+              - localhost:9093
+
+    - job_name: node
+      static_configs:
+          - targets:
+              - localhost:9100
