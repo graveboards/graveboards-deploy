@@ -99,6 +99,48 @@ curl http://localhost:8000/api/v1/health
 curl http://localhost:3000
 ```
 
+### Prometheus Metrics
+
+The backend exposes Prometheus-compatible metrics at `/api/v1/metrics`:
+
+```bash
+# Fetch metrics
+curl http://localhost:8000/api/v1/metrics
+```
+
+**Available metrics:**
+
+| Metric | Type | Description |
+|--------|------|-------------|
+| `http_requests_total` | counter | Total HTTP requests by method, endpoint, status code |
+| `http_request_duration_seconds` | histogram | HTTP request latency (p50/p95/p99) |
+| `http_requests_in_flight` | gauge | Currently processing requests |
+| `db_pool_size` | gauge | Database connection pool size |
+| `db_pool_checked_out` | gauge | Connections currently checked out |
+| `db_pool_checked_in` | gauge | Connections currently checked in |
+| `db_pool_overflow` | gauge | Overflow connections in use |
+| `db_query_duration_seconds` | histogram | Database query latency by type |
+| `redis_commands_total` | counter | Redis commands by type and status |
+| `redis_commands_duration_seconds` | histogram | Redis command latency |
+| `redis_cache_hits_total` | counter | Cache hits (GET with data) |
+| `redis_cache_misses_total` | counter | Cache misses (GET with null) |
+| `osu_api_requests_total` | counter | osu! API calls by endpoint and status |
+| `osu_api_request_duration_seconds` | histogram | osu! API latency |
+| `osu_api_errors_total` | counter | osu! API errors by type |
+| `rate_limit_attempts_total` | counter | Rate limit checks (allowed/blocked) |
+| `rate_limit_retries_total` | counter | Rate limit retry count |
+| `daemon_runs_total` | counter | Daemon service runs by status |
+| `daemon_run_duration_seconds` | histogram | Daemon run latency |
+| `daemon_last_run_timestamp` | gauge | Last successful daemon run |
+| `daemon_total_failures` | counter | Daemon task failures |
+| `daemon_critical_failures` | counter | Critical task failures |
+| `process_cpu_seconds_total` | counter | CPU time consumed |
+| `process_resident_memory_bytes` | gauge | RSS memory usage |
+| `process_virtual_memory_bytes` | gauge | Virtual memory usage |
+| `errors_total` | counter | Errors by type, endpoint, status code |
+
+**Request IDs:** Every request gets a unique `request_id` (UUID) that is included in all log lines, enabling correlation between metrics and logs.
+
 ### Logs
 
 ```bash
