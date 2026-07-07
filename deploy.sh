@@ -590,14 +590,22 @@ else
     shift
     if [[ "$Command" == "logs" ]]; then
         Mode="${1:-all}"
-        shift
-        Service="$1"
+        if [[ $# -gt 0 ]]; then
+            shift
+            Service="$1"
+        else
+            Service="all"
+        fi
         DisableMonitoring="false"
     else
         Mode="${1:-dev}"
-        shift
-        if [[ "${1:-}" == "disable-monitoring" ]]; then
-            DisableMonitoring="true"
+        if [[ $# -gt 0 ]]; then
+            shift
+            if [[ "${1:-}" == "disable-monitoring" ]]; then
+                DisableMonitoring="true"
+            else
+                DisableMonitoring="false"
+            fi
         else
             DisableMonitoring="false"
         fi
