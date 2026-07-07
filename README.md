@@ -28,13 +28,42 @@ cd graveboards-deploy
 - Backend: http://localhost:8000
 - API Docs: http://localhost:8000/api/v1/ui
 
+### Monitoring Stack
+
+Prometheus, Grafana, Alertmanager, Loki, and Promtail are enabled by default for `dev` and `prod` modes:
+
+```bash
+# Start with monitoring (default)
+./deploy.sh up dev
+./deploy.sh up prod
+
+# Disable monitoring if needed
+./deploy.sh up dev disable-monitoring
+./deploy.sh up prod disable-monitoring
+
+# Or use docker compose directly
+docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d
+docker compose -f docker-compose.prod.yml -f docker-compose.monitoring.yml up -d
+```
+
+**Monitoring Access:**
+- Grafana: http://localhost:3001 (default: admin / password)
+- Prometheus: http://localhost:9090
+- Alertmanager: http://localhost:9093
+- Loki: http://localhost:3100
+
+**Setup Discord alerts (prod):**
+1. Create a Discord webhook in your server settings (Server Settings > Integrations > Webhooks)
+2. Add to `.env.prod`: `ALERTMANAGER_DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/YOUR_ID/YOUR_TOKEN`
+3. Restart: `./deploy.sh up prod`
+
 ---
 
 ## Commands
 
 ```bash
 cd graveboards-deploy
-./deploy.sh up [mode]               # Start services
+./deploy.sh up [mode] [disable-monitoring]  # Start services
 ./deploy.sh down [mode]             # Stop services
 ./deploy.sh logs [mode] [service]   # View logs
 ./deploy.sh test                    # Run tests
@@ -45,10 +74,15 @@ cd graveboards-deploy
 ```
 
 **Modes:**
-- `dev`      - Development (default, hot-reload)
-- `prod`     - Production (Docker named volumes)
-- `prod-nas` - Production (NAS/external mounts)
-- `test`     - Testing (isolated DB/Redis, runs pytest)
+- `dev`      - Development (default, hot-reload, monitoring enabled)
+- `prod`     - Production (Docker named volumes, monitoring enabled)
+- `prod-nas` - Production (NAS/external mounts, monitoring enabled)
+- `test`     - Testing (isolated DB/Redis, runs pytest, no monitoring)
+
+**Monitoring:**
+- Enabled by default for `dev`, `prod`, and `prod-nas`
+- Pass `disable-monitoring` to run without the observability stack
+- Example: `./deploy.sh up prod disable-monitoring`
 
 **Services (for logs):**
 - `all` - All services (default)
