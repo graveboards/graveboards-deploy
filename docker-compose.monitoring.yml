@@ -79,11 +79,11 @@ services:
     alertmanager:
         image: prom/alertmanager:v0.27.0
         container_name: graveboards-alertmanager
-        command:
-            - "--config.file=/etc/alertmanager/alertmanager.yml"
-            - "--storage.path=/alertmanager"
-            - "--web.listen-address=0.0.0.0:9093"
+        environment:
+            - ALERTMANAGER_DISCORD_WEBHOOK_URL=${ALERTMANAGER_DISCORD_WEBHOOK_URL}
+        entrypoint: ["/bin/sh", "/entrypoint.sh"]
         volumes:
+            - ./monitoring/alertmanager/entrypoint.sh:/entrypoint.sh:ro
             - ./monitoring/alertmanager:/etc/alertmanager:ro
             - alertmanager-data:/alertmanager
         networks:
@@ -145,6 +145,28 @@ services:
         depends_on:
             loki:
                 condition: service_healthy
+        restart: unless-stopped
+        deploy:
+            resources:
+                limits:
+                    cpus: '0.25'
+                    memory: 256M
+                reservations:
+                    cpus: '0.1'
+                    memory: 128M
+
+    node-exporter:
+        image: prom/node-exporter:v1.7.0
+        container_name: graveboards-node-exporter
+        command:
+            - "--path.rootfs=/host"
+            - "--web.listen-address=0.0.0.0:9100"
+        volumes:
+            - /:/host:ro,rslave
+        networks:
+            - app
+        ports:
+            - "9100:9100"
         restart: unless-stopped
         deploy:
             resources:
