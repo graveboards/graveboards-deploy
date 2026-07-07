@@ -20,232 +20,271 @@ write_success() { printf "${ColorSuccess}[OK]${ColorReset} %b\n" "$1"; }
 write_error() { printf "${ColorError}[ERROR]${ColorReset} %b\n" "$1"; }
 write_warning() { printf "${ColorWarning}[WARN]${ColorReset} %b\n" "$1"; }
 
-# Required variables by file
+# Required variables for deploy .env
+REQUIRED_VARS=(
+    "POSTGRESQL_PASSWORD"
+    "POSTGRESQL_DATABASE"
+    "JWT_SECRET_KEY"
+    "SESSION_SECRET"
+    "OSU_CLIENT_ID"
+    "OSU_CLIENT_SECRET"
+    "INTERNAL_API_URL"
+    "APP_URL"
+)
+
+# Optional but recommended
+OPTIONAL_VARS=(
+    "DEBUG"
+    "DISABLE_SECURITY"
+    "BASE_URL"
+    "JWT_ALGORITHM"
+    "POSTGRESQL_HOST"
+    "POSTGRESQL_PORT"
+    "POSTGRESQL_USERNAME"
+    "REDIS_HOST"
+    "REDIS_PORT"
+    "REDIS_USERNAME"
+    "REDIS_PASSWORD"
+    "REDIS_DB"
+    "NEXT_PUBLIC_API_URL"
+)
+
+# NAS volume paths (required only when using prod-nas)
+NAS_VARS=(
+    "POSTGRESQL_DATA_PATH"
+    "REDIS_DATA_PATH"
+    "INSTANCE_DATA_PATH"
+)
+
 validate_env_file() {
     local file="$1"
     local mode="$2"
-    
+
     if [[ ! -f "$file" ]]; then
         write_error "Environment file not found: $file"
         return 1
     fi
-    
+
     write_info "Validating $mode environment file: $file"
-    
+
     # Source the file to get variables
     set -a
     source "$file"
     set +a
-    
-    # Required variables for backend
-    local required_vars=(
-        "JWT_SECRET_KEY"
-        "POSTGRESQL_HOST"
-        "POSTGRESQL_PORT"
-        "POSTGRESQL_USERNAME"
-        "POSTGRESQL_PASSWORD"
-        "POSTGRESQL_DATABASE"
-        "REDIS_HOST"
-        "REDIS_PORT"
-    )
-    
-    # Check each required variable
-    for var in "${required_vars[@]}"; do
+
+    local has_errors=0
+
+    # Check required variables
+    for var in "${REQUIRED_VARS[@]}"; do
         if [[ -z "${!var}" ]]; then
             write_error "Missing required variable: $var"
-            return 1
+            has_errors=1
         fi
     done
-    
+
     # Validate JWT_SECRET_KEY length (must be 32+ characters)
-    if [[ ${#JWT_SECRET_KEY} -lt 32 ]]; then
+    if [[ -n "${JWT_SECRET_KEY}" ]] && [[ ${#JWT_SECRET_KEY} -lt 32 ]]; then
         write_error "JWT_SECRET_KEY must be at least 32 characters (currently ${#JWT_SECRET_KEY})"
-        return 1
+        has_errors=1
     fi
-    
 
-    
-    write_success "Environment file validation passed: $file"
-    return 0
-}
+    # Check optional variables
+    for var in "${OPTIONAL_VARS[@]}"; do
+        if [[ -z "${!var}" ]]; then
+            write_warning "Optional variable not set: $var"
+        fi
+    done
 
-validate_compose_file() {
-    local compose_file="$1"
-    
-    if [[ ! -f "$compose_file" ]]; then
-        write_error "Compose file not found: $compose_file"
-        return 1
-    fi
-    
-    write_info "Validating compose file: $compose_file"
-    
-    # Check for common issues
-    if grep -q 'POSTGRES_PASSWORD=' "$compose_file" 2>/dev/null; then
-        write_warning "Found hardcoded POSTGRES_PASSWORD in compose file (should use secrets or env file)"
-    fi
-    
-    if grep -q 'image: postgres' "$compose_file" 2>/dev/null; then
-        write_info "PostgreSQL image found"
-    fi
-    
-    if grep -q 'image: redis' "$compose_file" 2>/dev/null; then
-        write_info "Redis image found"
-    fi
-    
-    write_success "Compose file validation passed: $compose_file"
-    return 0
-}
-
-validate_backend() {
-    local backend_dir="$SCRIPT_DIR/../graveboards-backend"
-    local env_file="$backend_dir/.env"
-    local env_example="$backend_dir/.env.example"
-    
-    write_info "=== Backend Validation ==="
-    
-    # Check .env file
-    if [[ -f "$env_file" ]]; then
-        validate_env_file "$env_file" "deploy"
-    else
-        write_warning "Deploy .env file not found (first run - will be auto-generated)"
-    fi
-    
-    # Validate SESSION_SECRET for frontend (not required in backend .env)
-    local session_secret=""
-    if [[ -n "${SESSION_SECRET:-}" ]]; then
-        session_secret="$SESSION_SECRET"
-    fi
-    
-    # For backend env files, SESSION_SECRET might not be set
-    # Skip validation if it's a backend .env file (no SESSION_SECRET)
-    if [[ -z "$session_secret" ]] && [[ "$mode" != "deploy" ]]; then
+    if [[ "$has_errors" -eq 0 ]]; then
         write_success "Environment file validation passed: $file"
         return 0
-    fi
-    
-    # Check Dockerfile exists
-    if [[ ! -f "$backend_dir/Dockerfile" ]]; then
-        write_error "Backend Dockerfile not found"
-        exit 1
-    fi
-    write_success "Backend Dockerfile found"
-    
-    # Check requirements.txt
-    if [[ ! -f "$backend_dir/requirements.txt" ]]; then
-        write_error "Backend requirements.txt not found"
-        exit 1
-    fi
-    write_success "Backend requirements.txt found"
-}
-
-validate_frontend() {
-    local frontend_dir="$SCRIPT_DIR/../graveboards-frontend"
-    local env_local="$frontend_dir/.env.local"
-    local env_example="$frontend_dir/.env.local.example"
-    
-    write_info "=== Frontend Validation ==="
-    
-    # Check .env.local file
-    if [[ -f "$env_local" ]]; then
-        validate_env_file "$env_local" "frontend"
     else
-        write_warning "Frontend .env.local file not found, using .env.local.example as template"
-        # Don't fail on missing .env.local (it's gitignored)
+        return 1
     fi
-    
-    # Check package.json
-    if [[ ! -f "$frontend_dir/package.json" ]]; then
-        write_error "Frontend package.json not found"
-        exit 1
-    fi
-    write_success "Frontend package.json found"
-    
-    # Check next.config.ts
-    if [[ ! -f "$frontend_dir/next.config.ts" ]]; then
-        write_error "Frontend next.config.ts not found"
-        exit 1
-    fi
-    write_success "Frontend next.config.ts found"
-    
-    # Check frontend health endpoint
-    if [[ ! -f "$frontend_dir/src/app/api/health/route.ts" ]]; then
-        write_error "Frontend health endpoint not found at src/app/api/health/route.ts"
-        exit 1
-    fi
-    write_success "Frontend health endpoint found"
-    
-    # Check Dockerfile
-    if [[ ! -f "$frontend_dir/Dockerfile" ]]; then
-        write_error "Frontend Dockerfile not found"
-        exit 1
-    fi
-    write_success "Frontend Dockerfile found"
 }
 
-validate_deploy() {
-    local deploy_dir="$SCRIPT_DIR"
+validate_nas_vars() {
+    local file="$1"
+
+    if [[ ! -f "$file" ]]; then
+        return 0
+    fi
+
+    write_info "Checking NAS volume configuration..."
+
+    set -a
+    source "$file"
+    set +a
+
+    local has_errors=0
+    for var in "${NAS_VARS[@]}"; do
+        if [[ -z "${!var}" ]]; then
+            write_warning "NAS variable not set: $var (required for prod-nas)"
+            has_errors=1
+        fi
+    done
+
+    if [[ "$has_errors" -eq 0 ]]; then
+        write_success "NAS volume configuration valid"
+    fi
+}
+
+validate_compose_files() {
+    local deploy_dir="$1"
     local compose_files=(
         "$deploy_dir/docker-compose.yml"
         "$deploy_dir/docker-compose.prod.yml"
         "$deploy_dir/docker-compose.test.yml"
     )
-    
-    write_info "=== Deploy Validation ==="
-    
+
+    write_info "=== Compose Files ==="
+
+    for compose_file in "${compose_files[@]}"; do
+        if [[ -f "$compose_file" ]]; then
+            write_success "Found: $(basename "$compose_file")"
+        else
+            write_warning "Missing: $(basename "$compose_file")"
+        fi
+    done
+
+    # Check for prod-nas override
+    if [[ -f "$deploy_dir/docker-compose.prod-nas.yml" ]]; then
+        write_success "Found: docker-compose.prod-nas.yml"
+    fi
+
+    # Check for prod-traefik override
+    if [[ -f "$deploy_dir/docker-compose.prod-traefik.yml" ]]; then
+        write_success "Found: docker-compose.prod-traefik.yml"
+    fi
+}
+
+validate_backend() {
+    local backend_dir="$SCRIPT_DIR/../graveboards-backend"
+
+    write_info "=== Backend ==="
+
+    if [[ -d "$backend_dir" ]]; then
+        write_success "Backend directory found"
+    else
+        write_error "Backend directory not found: $backend_dir"
+        return 1
+    fi
+
+    if [[ -f "$backend_dir/Dockerfile" ]]; then
+        write_success "Backend Dockerfile found"
+    else
+        write_error "Backend Dockerfile not found"
+        return 1
+    fi
+
+    if [[ -f "$backend_dir/requirements.txt" ]]; then
+        write_success "Backend requirements.txt found"
+    else
+        write_warning "Backend requirements.txt not found"
+    fi
+
+    if [[ -f "$backend_dir/config/bootstrap.yaml" ]]; then
+        write_success "Backend bootstrap.yaml found"
+    else
+        write_warning "Backend bootstrap.yaml not found (will be auto-generated on first run)"
+    fi
+}
+
+validate_frontend() {
+    local frontend_dir="$SCRIPT_DIR/../graveboards-frontend"
+
+    write_info "=== Frontend ==="
+
+    if [[ -d "$frontend_dir" ]]; then
+        write_success "Frontend directory found"
+    else
+        write_error "Frontend directory not found: $frontend_dir"
+        return 1
+    fi
+
+    if [[ -f "$frontend_dir/package.json" ]]; then
+        write_success "Frontend package.json found"
+    else
+        write_error "Frontend package.json not found"
+        return 1
+    fi
+
+    if [[ -f "$frontend_dir/Dockerfile" ]]; then
+        write_success "Frontend Dockerfile found"
+    else
+        write_error "Frontend Dockerfile not found"
+        return 1
+    fi
+}
+
+validate_deploy() {
+    local deploy_dir="$SCRIPT_DIR"
+
+    write_info "=== Deploy ==="
+
     # Check .env file
     local env_file="$deploy_dir/.env"
     if [[ -f "$env_file" ]]; then
-        validate_env_file "$env_file" "deploy"
+        validate_env_file "$env_file" "deploy" || return 1
     else
-        write_warning "Deploy .env file not found (this is OK for the first run)"
+        write_warning "Deploy .env file not found (will be auto-generated on first run)"
     fi
-    
-    # Validate compose files
-    for compose_file in "${compose_files[@]}"; do
-        validate_compose_file "$compose_file" || exit 1
-    done
-    
-    # Check deploy.sh
-    if [[ ! -f "$deploy_dir/deploy.sh" ]]; then
+
+    # Check deploy script
+    if [[ -f "$deploy_dir/deploy.sh" ]]; then
+        write_success "Deploy script found"
+    else
         write_error "Deploy script (deploy.sh) not found"
-        exit 1
+        return 1
     fi
-    write_success "Deploy script found"
-    
-    # Check deploy.ps1 (Windows)
-    if [[ -f "$deploy_dir/deploy.ps1" ]]; then
-        write_success "Windows deploy script found"
+
+    # Check backup/restore scripts
+    if [[ -f "$deploy_dir/backup.sh" ]]; then
+        write_success "Backup script found"
     else
-        write_warning "Windows deploy script (deploy.ps1) not found"
+        write_warning "Backup script not found"
+    fi
+
+    if [[ -f "$deploy_dir/restore.sh" ]]; then
+        write_success "Restore script found"
+    else
+        write_warning "Restore script not found"
+    fi
+
+    # Check setup-service script
+    if [[ -f "$deploy_dir/setup-service.sh" ]]; then
+        write_success "Systemd service generator found"
+    else
+        write_warning "Systemd service generator not found"
     fi
 }
 
 check_docker() {
-    write_info "=== Docker Validation ==="
-    
-    # Check if Docker is installed
-    if ! command -v docker &> /dev/null; then
+    write_info "=== Docker ==="
+
+    if ! command -v docker &>/dev/null; then
         write_error "Docker is not installed"
         echo "Please install Docker: https://docs.docker.com/get-docker/"
         exit 1
     fi
     write_success "Docker is installed"
-    
-    # Check if Docker daemon is running
-    if ! docker info &> /dev/null; then
+
+    if ! docker info &>/dev/null; then
         write_error "Docker daemon is not running"
         echo "Please start Docker"
         exit 1
     fi
     write_success "Docker daemon is running"
-    
-    # Check Docker Compose
-    if ! docker compose version &> /dev/null; then
+
+    if docker compose version &>/dev/null; then
+        write_success "Docker Compose plugin available"
+    elif docker-compose version &>/dev/null; then
+        write_success "Docker Compose standalone available"
+    else
         write_error "Docker Compose is not available"
         echo "Please upgrade Docker: https://docs.docker.com/compose/"
         exit 1
     fi
-    write_success "Docker Compose is available"
 }
 
 print_summary() {
@@ -253,11 +292,6 @@ print_summary() {
     echo "========================================="
     echo "Environment Validation Summary"
     echo "========================================="
-    echo
-    echo "✓ Backend   : Validated"
-    echo "✓ Frontend  : Validated"
-    echo "✓ Deploy    : Validated"
-    echo "✓ Docker    : Validated"
     echo
     write_success "All validations passed!"
     echo
@@ -273,13 +307,18 @@ main() {
     echo "Graveboards Environment Validation"
     echo "========================================="
     echo
-    
+
     check_docker
-    
     validate_backend
     validate_frontend
     validate_deploy
-    
+    validate_compose_files "$SCRIPT_DIR"
+
+    # Validate NAS vars if .env has them
+    if [[ -f "$SCRIPT_DIR/.env" ]]; then
+        validate_nas_vars "$SCRIPT_DIR/.env"
+    fi
+
     print_summary
 }
 
