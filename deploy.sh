@@ -302,7 +302,7 @@ test_docker_running() {
 show_help() {
     cat << EOF
 Graveboards Deployment Script for Linux/Mac
-Usage: ./deploy.sh [command] [mode] [service]
+Usage: ./deploy.sh [command] [mode] [disable-monitoring]
 
 Commands:
   up [mode]             - Start services (default: dev)
@@ -320,6 +320,9 @@ Modes:
   prod-nas  - Production mode (NAS volumes)
   test      - Testing mode
 
+Flags:
+  disable-monitoring - Disable monitoring stack (Prometheus, Grafana, Alertmanager, Loki, Promtail)
+
 Services:
   all      - All services
   backend  - Backend service
@@ -328,14 +331,15 @@ Services:
   redis    - Redis cache
 
 Examples:
-  ./deploy.sh up dev            # Start dev mode
-  ./deploy.sh up prod           # Start prod mode
-  ./deploy.sh down prod         # Stop prod mode
-  ./deploy.sh build test        # Build test images
-  ./deploy.sh logs dev          # View dev logs (all services)
-  ./deploy.sh logs dev backend  # View dev backend logs only
-  ./deploy.sh logs prod all     # View prod all logs
-  ./deploy.sh logs test backend # View test backend logs only
+  ./deploy.sh up dev                    # Start dev mode
+  ./deploy.sh up prod                   # Start prod mode (monitoring enabled by default)
+  ./deploy.sh up prod disable-monitoring # Start prod mode without monitoring
+  ./deploy.sh down prod                 # Stop prod mode
+  ./deploy.sh build test                # Build test images
+  ./deploy.sh logs dev                  # View dev logs (all services)
+  ./deploy.sh logs dev backend          # View dev backend logs only
+  ./deploy.sh logs prod all             # View prod all logs
+  ./deploy.sh logs test backend         # View test backend logs only
 
 For more information, see README.md
 EOF
@@ -353,24 +357,40 @@ generate_prod_env() {
 
 start_services() {
     local mode="$1"
+    local disable_monitoring="${2:-false}"
     
     write_info "Starting Graveboards in $mode mode..."
     
     case "$mode" in
         dev)
-            docker-compose -f "$SCRIPT_DIR/docker-compose.yml" up --build &
+            local compose_files=("-f" "$SCRIPT_DIR/docker-compose.yml")
+            if [[ "$disable_monitoring" != "true" ]]; then
+                compose_files+=("-f" "$SCRIPT_DIR/docker-compose.monitoring.yml")
+                write_info "Monitoring stack enabled (Prometheus, Grafana, Alertmanager, Loki, Promtail)"
+            else
+                write_info "Monitoring stack disabled"
+            fi
+            docker-compose "${compose_files[@]}" up --build &
             COMPOSE_PROCESS_PID=$!
             wait $COMPOSE_PROCESS_PID
             ;;
         prod)
             generate_prod_env
-            docker-compose -f "$SCRIPT_DIR/docker-compose.prod.yml" up --build &
+            local compose_files=("-f" "$SCRIPT_DIR/docker-compose.prod.yml")
+            if [[ "$disable_monitoring" != "true" ]]; then
+                compose_files+=("-f" "$SCRIPT_DIR/docker-compose.monitoring.yml")
+            fi
+            docker-compose "${compose_files[@]}" up --build &
             COMPOSE_PROCESS_PID=$!
             wait $COMPOSE_PROCESS_PID
             ;;
         prod-nas)
             generate_prod_env
-            docker-compose -f "$SCRIPT_DIR/docker-compose.prod.yml" -f "$SCRIPT_DIR/docker-compose.prod-nas.yml" up --build &
+            local nas_files=("-f" "$SCRIPT_DIR/docker-compose.prod.yml" "-f" "$SCRIPT_DIR/docker-compose.prod-nas.yml")
+            if [[ "$disable_monitoring" != "true" ]]; then
+                nas_files+=("-f" "$SCRIPT_DIR/docker-compose.monitoring.yml")
+            fi
+            docker-compose "${nas_files[@]}" up --build &
             COMPOSE_PROCESS_PID=$!
             wait $COMPOSE_PROCESS_PID
             ;;
@@ -564,6 +584,7 @@ fi
 if [[ $# -eq 0 ]]; then
     Command="up"
     Mode="dev"
+    DisableMonitoring="false"
 else
     Command="$1"
     shift
@@ -571,8 +592,15 @@ else
         Mode="${1:-all}"
         shift
         Service="$1"
+        DisableMonitoring="false"
     else
         Mode="${1:-dev}"
+        shift
+        if [[ "${1:-}" == "disable-monitoring" ]]; then
+            DisableMonitoring="true"
+        else
+            DisableMonitoring="false"
+        fi
     fi
 fi
 
@@ -582,7 +610,7 @@ case "$Command" in
         show_help
         ;;
     up)
-        start_services "$Mode"
+        start_services "$Mode" "$DisableMonitoring"
         ;;
     down)
         stop_services "$Mode"

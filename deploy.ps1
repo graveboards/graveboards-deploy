@@ -22,7 +22,10 @@ param(
     [string]$Mode = "dev",
     
     [Parameter(Mandatory=$false, Position=2)]
-    [string]$Service = "all"
+    [string]$Service = "all",
+    
+    [Parameter(Mandatory=$false, Position=3)]
+    [string]$DisableMonitoring = "false"
 )
 
 $SCRIPT_DIR = Split-Path -Path $MyInvocation.MyCommand.Definition -Parent
@@ -305,7 +308,7 @@ function Test-DockerRunning {
 function Show-Help {
     Write-Host @"
 Graveboards Deployment Script for Windows
-Usage: .\deploy.ps1 [command] [mode] [service]
+Usage: .\deploy.ps1 [command] [mode] [service] [disable-monitoring]
 
 Commands:
   up [mode]             - Start services (default: dev)
@@ -323,6 +326,9 @@ Modes:
   prod-nas  - Production mode (NAS volumes)
   test      - Testing mode
 
+Flags:
+  disable-monitoring - Disable monitoring stack (Prometheus, Grafana, Alertmanager, Loki, Promtail)
+
 Services:
   all       - All services
   backend   - Backend service
@@ -331,14 +337,15 @@ Services:
   redis     - Redis cache
 
 Examples:
-  .\deploy.ps1 up dev               # Start dev mode
-  .\deploy.ps1 up prod              # Start prod mode
-  .\deploy.ps1 down prod            # Stop prod mode
-  .\deploy.ps1 build test           # Build test images
-  .\deploy.ps1 logs dev             # View dev logs (all services)
-  .\deploy.ps1 logs dev backend     # View dev backend logs only
-  .\deploy.ps1 logs prod all        # View prod all logs
-  .\deploy.ps1 logs test backend    # View test backend logs only
+  .\deploy.ps1 up dev                     # Start dev mode
+  .\deploy.ps1 up prod                    # Start prod mode (monitoring enabled by default)
+  .\deploy.ps1 up prod disable-monitoring # Start prod mode without monitoring
+  .\deploy.ps1 down prod                  # Stop prod mode
+  .\deploy.ps1 build test                 # Build test images
+  .\deploy.ps1 logs dev                   # View dev logs (all services)
+  .\deploy.ps1 logs dev backend           # View dev backend logs only
+  .\deploy.ps1 logs prod all              # View prod all logs
+  .\deploy.ps1 logs test backend          # View test backend logs only
 
 For more information, see README.md
 "@
@@ -346,7 +353,8 @@ For more information, see README.md
 
 function Start-Services {
     param(
-        [string]$Mode
+        [string]$Mode,
+        [string]$DisableMonitoring = "false"
     )
     
     Write-Info "Starting Graveboards in $Mode mode..."
@@ -354,7 +362,14 @@ function Start-Services {
     try {
         switch ($Mode) {
             "dev" {
-                docker-compose -f "$SCRIPT_DIR\docker-compose.yml" up --build
+                $composeFiles = @("-f", "$SCRIPT_DIR\docker-compose.yml")
+                if ($DisableMonitoring -ne "true") {
+                    $composeFiles += "-f", "$SCRIPT_DIR\docker-compose.monitoring.yml"
+                    Write-Info "Monitoring stack enabled (Prometheus, Grafana, Alertmanager, Loki, Promtail)"
+                } else {
+                    Write-Info "Monitoring stack disabled"
+                }
+                docker-compose $composeFiles up --build
             }
             "prod" {
                 if (-not (Test-Path "$SCRIPT_DIR\.env") -and -not (Test-Path "$SCRIPT_DIR\.env.prod")) {
@@ -364,7 +379,11 @@ function Start-Services {
                     Write-Host "  notepad .env.prod"
                     exit 1
                 }
-                docker-compose -f "$SCRIPT_DIR\docker-compose.prod.yml" up --build
+                $composeFiles = @("-f", "$SCRIPT_DIR\docker-compose.prod.yml")
+                if ($DisableMonitoring -ne "true") {
+                    $composeFiles += "-f", "$SCRIPT_DIR\docker-compose.monitoring.yml"
+                }
+                docker-compose $composeFiles up --build
             }
             "prod-nas" {
                 if (-not (Test-Path "$SCRIPT_DIR\.env") -and -not (Test-Path "$SCRIPT_DIR\.env.prod")) {
@@ -374,7 +393,11 @@ function Start-Services {
                     Write-Host "  notepad .env.prod"
                     exit 1
                 }
-                docker-compose -f "$SCRIPT_DIR\docker-compose.prod.yml" -f "$SCRIPT_DIR\docker-compose.prod-nas.yml" up --build
+                $nasComposeFiles = @("-f", "$SCRIPT_DIR\docker-compose.prod.yml", "-f", "$SCRIPT_DIR\docker-compose.prod-nas.yml")
+                if ($DisableMonitoring -ne "true") {
+                    $nasComposeFiles += "-f", "$SCRIPT_DIR\docker-compose.monitoring.yml"
+                }
+                docker-compose $nasComposeFiles up --build
             }
             "test" {
                 docker-compose -f "$SCRIPT_DIR\docker-compose.test.yml" up --profile test --build
@@ -581,7 +604,7 @@ if (-not (Test-DockerRunning)) {
 
 switch ($Command) {
     "help" { Show-Help }
-    "up" { Start-Services -Mode $Mode }
+    "up" { Start-Services -Mode $Mode -DisableMonitoring $DisableMonitoring }
     "down" { Stop-Services -Mode $Mode }
     "build" { Build-Images -Mode $Mode }
     "logs" { View-Logs -Mode $Mode -Service $Service }
