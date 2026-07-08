@@ -33,11 +33,6 @@ services:
                 reservations:
                     cpus: '1'
                     memory: 2G
-        logging:
-            driver: "json-file"
-            options:
-                max-size: "10m"
-                max-file: "3"
 
     redis:
         image: redis:7-alpine
@@ -69,11 +64,6 @@ services:
                 reservations:
                     cpus: '0.5'
                     memory: 512M
-        logging:
-            driver: "json-file"
-            options:
-                max-size: "10m"
-                max-file: "3"
 
     backend:
         container_name: graveboards-backend
@@ -105,9 +95,6 @@ services:
         security_opt:
             - no-new-privileges:true
         read_only: true
-        tmpfs:
-            - /tmp
-            - /app/instance/logs
         restart: unless-stopped
         deploy:
             resources:
@@ -117,11 +104,6 @@ services:
                 reservations:
                     cpus: '1'
                     memory: 2G
-        logging:
-            driver: "json-file"
-            options:
-                max-size: "10m"
-                max-file: "3"
 
     frontend:
         container_name: graveboards-frontend
@@ -151,11 +133,6 @@ services:
                 reservations:
                     cpus: '0.5'
                     memory: 1G
-        logging:
-            driver: "json-file"
-            options:
-                max-size: "10m"
-                max-file: "3"
 
 volumes:
     postgresql-data:
