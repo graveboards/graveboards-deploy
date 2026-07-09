@@ -166,7 +166,7 @@ services:
                     memory: 128M
 
     postgres-exporter:
-        image: prom/postgres-exporter:latest
+        image: prometheuscommunity/postgres-exporter:latest
         container_name: graveboards-postgres-exporter
         environment:
             - DATA_SOURCE_NAME=postgresql://${POSTGRESQL_USERNAME:-postgres}:${POSTGRESQL_PASSWORD}@postgresql:5432/${POSTGRESQL_DATABASE:-graveboards_prod}?sslmode=disable
