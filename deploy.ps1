@@ -129,11 +129,15 @@ function Git-PullRepo {
     Write-Info "Pulling $(Split-Path $Repo -Leaf)..."
     Push-Location $Repo
     try {
-        git pull --ff-only
+        # Pipe git's stdout to the host so it does not pollute this function's
+        # return value; a native non-zero exit does not throw, so check exit code.
+        git pull --ff-only | Out-Host
+        if ($LASTEXITCODE -ne 0) {
+            Write-Error "Failed to pull $(Split-Path $Repo -Leaf)."
+            return $false
+        }
         Write-Success "Updated $(Split-Path $Repo -Leaf)"
-    } catch {
-        Write-Error "Failed to pull $(Split-Path $Repo -Leaf)."
-        return $false
+        return $true
     } finally {
         Pop-Location
     }
@@ -196,7 +200,6 @@ function Cleanup-Services {
     } else {
         & docker-compose @composeFiles 2>$null
     }
-    $null = docker network prune -f 2>$null
 }
 
 try {
@@ -214,8 +217,54 @@ try {
 # Interactive config generation
 # =========================
 
+# Config files this script manages. A file is only ever (re)generated when it is
+# missing or empty — an existing, non-empty file is ALWAYS preserved, so running
+# against a populated repo (e.g. a configured production .env) never destroys it.
+function Get-ConfigTargets {
+    return @(
+        (Join-Path $BACKEND_DIR "config\bootstrap.yaml"),
+        (Join-Path $BACKEND_DIR "config\bootstrap.test.yaml"),
+        (Join-Path $BACKEND_DIR ".env"),
+        (Join-Path $BACKEND_DIR ".env.test"),
+        (Join-Path $SCRIPT_DIR ".env")
+    )
+}
+
+# A target is "missing" (safe to write) when absent or zero-length.
+function Test-NeedsContent {
+    param([string]$Path)
+    return (-not (Test-Path -LiteralPath $Path)) -or ((Get-Item -LiteralPath $Path).Length -eq 0)
+}
+
+$script:CreatedFiles = @()
+$script:SkippedFiles = @()
+
+# Write $Content to $Path only if it is missing/empty; otherwise preserve the
+# existing file. Outcome is recorded for the summary.
+function Write-ConfigFile {
+    param([string]$Path, [string]$Content)
+    if (Test-NeedsContent -Path $Path) {
+        $dir = Split-Path -Path $Path -Parent
+        if ($dir -and -not (Test-Path -LiteralPath $dir)) {
+            New-Item -ItemType Directory -Path $dir -Force | Out-Null
+        }
+        Set-Content -Path $Path -Value $Content
+        $script:CreatedFiles += $Path
+    } else {
+        $script:SkippedFiles += $Path
+    }
+}
+
 function Generate-ConfigFiles {
-    Write-Info "Configuration files not found. Starting interactive setup..."
+    # Prompt only when at least one managed file is missing; otherwise no-op.
+    $missing = @(Get-ConfigTargets | Where-Object { Test-NeedsContent -Path $_ })
+    if ($missing.Count -eq 0) { return }
+
+    $script:CreatedFiles = @()
+    $script:SkippedFiles = @()
+
+    Write-Info "Missing configuration detected — starting interactive setup."
+    Write-Info "Existing, non-empty files are preserved; only the gaps are filled."
     Write-Host ""
 
     $Chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
@@ -317,7 +366,7 @@ function Generate-ConfigFiles {
     $yamlLines += "  - seed_queues"
 
     $yamlContent = $yamlLines -join "`n"
-    Set-Content -Path (Join-Path $configDir "bootstrap.yaml") -Value $yamlContent
+    Write-ConfigFile -Path (Join-Path $configDir "bootstrap.yaml") -Content $yamlContent
 
     # --- Generate bootstrap.test.yaml ---
     $testYaml = @"
@@ -344,7 +393,7 @@ setup_steps:
   - seed_api_keys
   - seed_queues
 "@
-    Set-Content -Path (Join-Path $configDir "bootstrap.test.yaml") -Value $testYaml
+    Write-ConfigFile -Path (Join-Path $configDir "bootstrap.test.yaml") -Content $testYaml
 
     # Create .env for direct Python dev mode
     $envDevContent = @"
@@ -367,7 +416,7 @@ REDIS_USERNAME=
 REDIS_PASSWORD=
 REDIS_DB=0
 "@
-    Set-Content -Path (Join-Path $BACKEND_DIR ".env") -Value $envDevContent
+    Write-ConfigFile -Path (Join-Path $BACKEND_DIR ".env") -Content $envDevContent
 
     # Create .env.test
     $envTestContent = @"
@@ -390,7 +439,7 @@ REDIS_USERNAME=
 REDIS_PASSWORD=
 REDIS_DB=15
 "@
-    Set-Content -Path (Join-Path $BACKEND_DIR ".env.test") -Value $envTestContent
+    Write-ConfigFile -Path (Join-Path $BACKEND_DIR ".env.test") -Content $envTestContent
 
     # Create .env for deploy orchestrator
     $envDeployContent = @"
@@ -420,15 +469,17 @@ INTERNAL_API_URL=http://graveboards-backend:8000/api/v1
 SESSION_SECRET=$SessionSecret
 APP_URL=http://localhost:3000
 "@
-    Set-Content -Path (Join-Path $SCRIPT_DIR ".env") -Value $envDeployContent
+    Write-ConfigFile -Path (Join-Path $SCRIPT_DIR ".env") -Content $envDeployContent
 
     Write-Host ""
-    Write-Success "[OK] Configuration files created:"
-    Write-Host "  - $(Join-Path $BACKEND_DIR '.env') (dev mode with localhost DB/Redis)"
-    Write-Host "  - $(Join-Path $BACKEND_DIR '.env.test') (test mode with isolated DB/Redis)"
-    Write-Host "  - $(Join-Path $configDir 'bootstrap.yaml') (dev bootstrap config)"
-    Write-Host "  - $(Join-Path $configDir 'bootstrap.test.yaml') (test bootstrap config)"
-    Write-Host "  - $(Join-Path $SCRIPT_DIR '.env') (deploy orchestrator config)"
+    if ($script:CreatedFiles.Count -gt 0) {
+        Write-Success "Created $($script:CreatedFiles.Count) configuration file(s):"
+        foreach ($f in $script:CreatedFiles) { Write-Host "  + $f" }
+    }
+    if ($script:SkippedFiles.Count -gt 0) {
+        Write-Info "Preserved $($script:SkippedFiles.Count) existing file(s) — left untouched:"
+        foreach ($f in $script:SkippedFiles) { Write-Host "  = $f" }
+    }
     Write-Host ""
     Write-Host "You have been added as admin user $OSU_USER_ID."
     if ($ExtraQueues.Count -gt 0) {
@@ -440,13 +491,9 @@ APP_URL=http://localhost:3000
     Write-Host ""
 }
 
-# Check if .env files exist, generate if not
-if (-not (Test-Path (Join-Path $BACKEND_DIR ".env"))) {
-    Generate-ConfigFiles
-}
-if (-not (Test-Path (Join-Path $SCRIPT_DIR ".env"))) {
-    Generate-ConfigFiles
-}
+# Fill any missing config files. No-op (and silent) when everything already exists,
+# so this is safe to run on every invocation without clobbering populated configs.
+Generate-ConfigFiles
 
 # =========================
 # Help
@@ -620,11 +667,11 @@ function Cmd-Up {
     if ($follow -eq "false") {
         Write-Info "Starting Graveboards in $mode mode..."
         if ($mode -ne "test") {
-            Invoke-Compose -Mode $mode -NoMonitoring $noMonitoring -Nas $nas -Traefik $traefik -MonitoringPorts $monitoringPorts -MonitoringTraefik $monitoringTraefik -ExtraArgs @("up", "-d") + $extra
+            Invoke-Compose -Mode $mode -NoMonitoring $noMonitoring -Nas $nas -Traefik $traefik -MonitoringPorts $monitoringPorts -MonitoringTraefik $monitoringTraefik -ExtraArgs (@("up", "-d") + $extra)
             Write-Success "Services started!"
-            Invoke-Compose -Mode $mode -NoMonitoring $noMonitoring -Nas $nas -Traefik $traefik -MonitoringPorts $monitoringPorts -MonitoringTraefik $monitoringTraefik -ExtraArgs @("logs", "-f") + $extra
+            Invoke-Compose -Mode $mode -NoMonitoring $noMonitoring -Nas $nas -Traefik $traefik -MonitoringPorts $monitoringPorts -MonitoringTraefik $monitoringTraefik -ExtraArgs (@("logs", "-f") + $extra)
         } else {
-            Invoke-Compose -Mode $mode -NoMonitoring $noMonitoring -Nas $nas -Traefik $traefik -MonitoringPorts $monitoringPorts -MonitoringTraefik $monitoringTraefik -ExtraArgs @("up", "--profile", "test", "--build") + $extra
+            Invoke-Compose -Mode $mode -NoMonitoring $noMonitoring -Nas $nas -Traefik $traefik -MonitoringPorts $monitoringPorts -MonitoringTraefik $monitoringTraefik -ExtraArgs (@("up", "--profile", "test", "--build") + $extra)
         }
     } else {
         Write-Info "Starting Graveboards in $mode mode (foreground)..."
@@ -649,16 +696,16 @@ function Cmd-Up {
         }
         if ($mode -ne "test") {
             if ($COMPOSE_CMD.Count -gt 1) {
-                $script:COMPOSE_PROCESS_PID = (Start-Process -FilePath $COMPOSE_CMD[0] -ArgumentList @("compose") + $composeFiles + @("--build") + $extra -NoNewWindow -PassThru).Id
+                $script:COMPOSE_PROCESS_PID = (Start-Process -FilePath $COMPOSE_CMD[0] -ArgumentList (@("compose") + $composeFiles + @("up", "--build") + $extra) -NoNewWindow -PassThru).Id
             } else {
-                $script:COMPOSE_PROCESS_PID = (Start-Process -FilePath $COMPOSE_CMD[0] -ArgumentList $composeFiles + @("up", "--build") + $extra -NoNewWindow -PassThru).Id
+                $script:COMPOSE_PROCESS_PID = (Start-Process -FilePath $COMPOSE_CMD[0] -ArgumentList ($composeFiles + @("up", "--build") + $extra) -NoNewWindow -PassThru).Id
             }
         } else {
             $testComposeFiles = @("-f", "$SCRIPT_DIR\docker-compose.test.yml")
             if ($COMPOSE_CMD.Count -gt 1) {
-                $script:COMPOSE_PROCESS_PID = (Start-Process -FilePath $COMPOSE_CMD[0] -ArgumentList @("compose") + $testComposeFiles + @("--profile", "test", "--build") + $extra -NoNewWindow -PassThru).Id
+                $script:COMPOSE_PROCESS_PID = (Start-Process -FilePath $COMPOSE_CMD[0] -ArgumentList (@("compose") + $testComposeFiles + @("up", "--profile", "test", "--build") + $extra) -NoNewWindow -PassThru).Id
             } else {
-                $script:COMPOSE_PROCESS_PID = (Start-Process -FilePath $COMPOSE_CMD[0] -ArgumentList $testComposeFiles + @("up", "--profile", "test", "--build") + $extra -NoNewWindow -PassThru).Id
+                $script:COMPOSE_PROCESS_PID = (Start-Process -FilePath $COMPOSE_CMD[0] -ArgumentList ($testComposeFiles + @("up", "--profile", "test", "--build") + $extra) -NoNewWindow -PassThru).Id
             }
         }
         Wait-Process -Id $script:COMPOSE_PROCESS_PID
@@ -674,7 +721,7 @@ function Cmd-Down {
     Write-Info "Stopping Graveboards services..."
 
     if ($extra.Count -gt 0) {
-        Invoke-Compose -Mode $mode -NoMonitoring $noMonitoring -Nas $nas -Traefik $traefik -MonitoringPorts $monitoringPorts -MonitoringTraefik $monitoringTraefik -ExtraArgs @("down") + $extra
+        Invoke-Compose -Mode $mode -NoMonitoring $noMonitoring -Nas $nas -Traefik $traefik -MonitoringPorts $monitoringPorts -MonitoringTraefik $monitoringTraefik -ExtraArgs (@("down") + $extra)
     } else {
         Invoke-Compose -Mode $mode -NoMonitoring $noMonitoring -Nas $nas -Traefik $traefik -MonitoringPorts $monitoringPorts -MonitoringTraefik $monitoringTraefik -ExtraArgs @("down")
     }
@@ -690,7 +737,7 @@ function Cmd-Build {
     Write-Info "Building Graveboards images for $mode mode..."
 
     if ($extra.Count -gt 0) {
-        Invoke-Compose -Mode $mode -NoMonitoring $noMonitoring -Nas $nas -Traefik $traefik -MonitoringPorts $monitoringPorts -MonitoringTraefik $monitoringTraefik -ExtraArgs @("build") + $extra
+        Invoke-Compose -Mode $mode -NoMonitoring $noMonitoring -Nas $nas -Traefik $traefik -MonitoringPorts $monitoringPorts -MonitoringTraefik $monitoringTraefik -ExtraArgs (@("build") + $extra)
     } else {
         Invoke-Compose -Mode $mode -NoMonitoring $noMonitoring -Nas $nas -Traefik $traefik -MonitoringPorts $monitoringPorts -MonitoringTraefik $monitoringTraefik -ExtraArgs @("build")
     }
@@ -704,27 +751,25 @@ function Cmd-Pull {
 
     if ($InputArgs.Count -eq 0) {
         Write-Info "Pulling all repositories..."
-        $ok = Git-PullRepo -Repo $BACKEND_DIR
-        if (-not $ok) { exit 1 }
-        $ok = Git-PullRepo -Repo $FRONTEND_DIR
-        if (-not $ok) { exit 1 }
-        $ok = Git-PullRepo -Repo $SCRIPT_DIR
-        if (-not $ok) { exit 1 }
+        if (-not (Git-PullRepo -Repo $BACKEND_DIR))  { return $false }
+        if (-not (Git-PullRepo -Repo $FRONTEND_DIR)) { return $false }
+        if (-not (Git-PullRepo -Repo $SCRIPT_DIR))   { return $false }
     } else {
         foreach ($repo in $InputArgs) {
             switch ($repo) {
-                "backend" { $ok = Git-PullRepo -Repo $BACKEND_DIR; if (-not $ok) { exit 1 } }
-                "frontend" { $ok = Git-PullRepo -Repo $FRONTEND_DIR; if (-not $ok) { exit 1 } }
-                "deploy" { $ok = Git-PullRepo -Repo $SCRIPT_DIR; if (-not $ok) { exit 1 } }
+                "backend"  { if (-not (Git-PullRepo -Repo $BACKEND_DIR))  { return $false } }
+                "frontend" { if (-not (Git-PullRepo -Repo $FRONTEND_DIR)) { return $false } }
+                "deploy"   { if (-not (Git-PullRepo -Repo $SCRIPT_DIR))   { return $false } }
                 default {
                     Write-Error "Unknown repository: $repo"
                     Write-Info "Valid repositories: backend, frontend, deploy"
-                    exit 1
+                    return $false
                 }
             }
         }
     }
     Write-Success "Repositories updated!"
+    return $true
 }
 
 function Cmd-ForcePull {
@@ -804,9 +849,9 @@ function Cmd-Deploy {
             }
         }
         if ($COMPOSE_CMD.Count -gt 1) {
-            $script:COMPOSE_PROCESS_PID = (Start-Process -FilePath $COMPOSE_CMD[0] -ArgumentList @("compose") + $composeFiles + @("--build") -NoNewWindow -PassThru).Id
+            $script:COMPOSE_PROCESS_PID = (Start-Process -FilePath $COMPOSE_CMD[0] -ArgumentList (@("compose") + $composeFiles + @("up", "--build")) -NoNewWindow -PassThru).Id
         } else {
-            $script:COMPOSE_PROCESS_PID = (Start-Process -FilePath $COMPOSE_CMD[0] -ArgumentList $composeFiles + @("up", "--build") -NoNewWindow -PassThru).Id
+            $script:COMPOSE_PROCESS_PID = (Start-Process -FilePath $COMPOSE_CMD[0] -ArgumentList ($composeFiles + @("up", "--build")) -NoNewWindow -PassThru).Id
         }
         Wait-Process -Id $script:COMPOSE_PROCESS_PID
     } else {
@@ -831,15 +876,12 @@ function Cmd-Logs {
         "all" { Invoke-Compose -Mode $mode -NoMonitoring $noMonitoring -Nas $nas -Traefik $traefik -MonitoringPorts $monitoringPorts -MonitoringTraefik $monitoringTraefik -ExtraArgs @("logs", "-f") }
         "backend" { Invoke-Compose -Mode $mode -NoMonitoring $noMonitoring -Nas $nas -Traefik $traefik -MonitoringPorts $monitoringPorts -MonitoringTraefik $monitoringTraefik -ExtraArgs @("logs", "-f", "backend") }
         "frontend" { Invoke-Compose -Mode $mode -NoMonitoring $noMonitoring -Nas $nas -Traefik $traefik -MonitoringPorts $monitoringPorts -MonitoringTraefik $monitoringTraefik -ExtraArgs @("logs", "-f", "frontend") }
-        "postgres", "postgresql" { Invoke-Compose -Mode $mode -NoMonitoring $noMonitoring -Nas $nas -Traefik $traefik -MonitoringPorts $monitoringPorts -MonitoringTraefik $monitoringTraefik -ExtraArgs @("logs", "-f", "postgresql") }
+        "postgres" { Invoke-Compose -Mode $mode -NoMonitoring $noMonitoring -Nas $nas -Traefik $traefik -MonitoringPorts $monitoringPorts -MonitoringTraefik $monitoringTraefik -ExtraArgs @("logs", "-f", "postgresql") }
+        "postgresql" { Invoke-Compose -Mode $mode -NoMonitoring $noMonitoring -Nas $nas -Traefik $traefik -MonitoringPorts $monitoringPorts -MonitoringTraefik $monitoringTraefik -ExtraArgs @("logs", "-f", "postgresql") }
         "redis" { Invoke-Compose -Mode $mode -NoMonitoring $noMonitoring -Nas $nas -Traefik $traefik -MonitoringPorts $monitoringPorts -MonitoringTraefik $monitoringTraefik -ExtraArgs @("logs", "-f", "redis") }
         default {
             Write-Info "Service '$service' not found. Showing all logs..."
             Invoke-Compose -Mode $mode -NoMonitoring $noMonitoring -Nas $nas -Traefik $traefik -MonitoringPorts $monitoringPorts -MonitoringTraefik $monitoringTraefik -ExtraArgs @("logs", "-f")
-        }
-    }
-}
-            Invoke-Compose -Mode $mode -ExtraArgs @("logs", "-f")
         }
     }
 }
@@ -944,7 +986,7 @@ switch ($Command) {
     "up" { Cmd-Up -InputArgs $Args }
     "down" { Cmd-Down -InputArgs $Args }
     "build" { Cmd-Build -InputArgs $Args }
-    "pull" { Cmd-Pull -InputArgs $Args }
+    "pull" { if (-not (Cmd-Pull -InputArgs $Args)) { exit 1 } }
     "force-pull" { Cmd-ForcePull -InputArgs $Args }
     "deploy" { Cmd-Deploy -InputArgs $Args }
     "logs" { Cmd-Logs -InputArgs $Args }
