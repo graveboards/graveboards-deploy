@@ -25,14 +25,14 @@
       }
     },
     {
-      "title": "Log Volume by Logger",
+      "title": "Total Log Rate",
       "type": "timeseries",
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
       "targets": [
         {
           "datasource": { "type": "loki", "uid": "Loki" },
-          "expr": "sum(count_over_time({service=~\"$service\"}[5m])) by (logger)",
-          "legendFormat": "{{logger}}",
+          "expr": "sum(rate({service=~\"$service\"} | json [5m]))",
+          "legendFormat": "logs/s",
           "refId": "A"
         }
       ],
@@ -48,7 +48,7 @@
       "targets": [
         {
           "datasource": { "type": "loki", "uid": "Loki" },
-          "expr": "sum(count_over_time({service=~\"$service\", level=\"ERROR\"}[1h]))",
+          "expr": "sum(count_over_time({service=~\"$service\", level=\"error\"}[1h]))",
           "legendFormat": "Errors",
           "refId": "A"
         }
@@ -74,7 +74,7 @@
       "targets": [
         {
           "datasource": { "type": "loki", "uid": "Loki" },
-          "expr": "sum(count_over_time({service=~\"$service\", level=~\"WARN(ING)?\"}[1h]))",
+          "expr": "sum(count_over_time({service=~\"$service\", level=\"warning\"}[1h]))",
           "legendFormat": "Warnings",
           "refId": "A"
         }
@@ -100,8 +100,8 @@
       "targets": [
         {
           "datasource": { "type": "loki", "uid": "Loki" },
-          "expr": "sum(rate({service=~\"$service\", logger=\"app\"} |=\"HTTP\" [5m])) by (status)",
-          "legendFormat": "{{status}}",
+          "expr": "sum(rate({service=~\"$service\"} | json | logger_name=~\"app.access\" [5m]))",
+          "legendFormat": "req/s",
           "refId": "A"
         }
       ],
@@ -117,8 +117,8 @@
       "targets": [
         {
           "datasource": { "type": "loki", "uid": "Loki" },
-          "expr": "sum(count_over_time({service=~\"$service\", level=\"ERROR\"}[1h])) by (logger)",
-          "legendFormat": "{{logger}}"
+          "expr": "topk(10, count_over_time({service=~\"$service\"} | json | level=\"error\" [1h]))",
+          "legendFormat": "{{logger_name}}"
         }
       ]
     },
@@ -129,8 +129,8 @@
       "targets": [
         {
           "datasource": { "type": "loki", "uid": "Loki" },
-          "expr": "topk(10, count_over_time({service=~\"$service\", level=\"ERROR\"}[1h]))",
-          "legendFormat": "{{message}}",
+          "expr": "topk(10, count_over_time({service=~\"$service\"} | json | level=\"error\" [1h]))",
+          "legendFormat": "{{event}}",
           "refId": "A"
         }
       ],
@@ -150,7 +150,7 @@
       "targets": [
         {
           "datasource": { "type": "loki", "uid": "Loki" },
-          "expr": "{service=~\"$service\", request_id=\"$request_id\"}",
+          "expr": "{service=~\"$service\"} | json | request_id=\"$request_id\"",
           "queryType": "range",
           "refId": "A"
         }
@@ -174,7 +174,7 @@
       "targets": [
         {
           "datasource": { "type": "loki", "uid": "Loki" },
-          "expr": "{service=~\"$service\"} | level=~\"$level\" | logger=~\"$logger\"",
+          "expr": "{service=~\"$service\"} | json | level=~\"$level\" | logger_name=~\"$logger\"",
           "queryType": "range",
           "refId": "A"
         }
@@ -218,24 +218,22 @@
         "label": "Level",
         "options": [
           { "text": "All", "value": "$__all", "selected": false },
-          { "text": "DEBUG", "value": "DEBUG", "selected": false },
-          { "text": "INFO", "value": "INFO", "selected": false },
-          { "text": "WARNING", "value": "WARNING", "selected": false },
-          { "text": "ERROR", "value": "ERROR", "selected": false }
+          { "text": "debug", "value": "debug", "selected": false },
+          { "text": "info", "value": "info", "selected": false },
+          { "text": "warning", "value": "warning", "selected": false },
+          { "text": "error", "value": "error", "selected": false },
+          { "text": "critical", "value": "critical", "selected": false }
         ],
-        "query": "DEBUG,INFO,WARNING,ERROR",
+        "query": "debug,info,warning,error,critical",
         "current": { "text": ["All"], "value": ["$__all"] }
       },
       {
         "name": "logger",
-        "type": "query",
-        "datasource": { "type": "loki", "uid": "Loki" },
-        "query": "label_values({service=~\"$service\"}, logger)",
-        "refresh": 2,
-        "sort": 1,
-        "multi": true,
-        "includeAll": true,
-        "current": { "text": ["All"], "value": ["$__all"] }
+        "type": "textbox",
+        "hide": 0,
+        "label": "Logger Name",
+        "query": ".*",
+        "current": { "text": ".*", "value": ".*" }
       },
       {
         "name": "request_id",

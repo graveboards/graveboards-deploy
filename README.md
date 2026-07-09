@@ -163,17 +163,18 @@ curl http://localhost:8000/api/v1/metrics
 | `osu_api_errors_total` | counter | osu! API errors by type |
 | `rate_limit_attempts_total` | counter | Rate limit checks (allowed/blocked) |
 | `rate_limit_retries_total` | counter | Rate limit retry count |
-| `daemon_runs_total` | counter | Daemon service runs by status |
-| `daemon_run_duration_seconds` | histogram | Daemon run latency |
-| `daemon_last_run_timestamp` | gauge | Last successful daemon run |
-| `daemon_total_failures` | counter | Daemon task failures |
-| `daemon_critical_failures` | counter | Critical task failures |
-| `process_cpu_seconds_total` | counter | CPU time consumed |
-| `process_resident_memory_bytes` | gauge | RSS memory usage |
-| `process_virtual_memory_bytes` | gauge | Virtual memory usage |
-| `errors_total` | counter | Errors by type, endpoint, status code |
+| `daemon_service_running` | gauge | Daemon service running status |
+| `daemon_jobs_total` | counter | Daemon jobs by service and status (success/failure/critical) |
+| `daemon_job_duration_seconds` | histogram | Daemon job latency |
+| `daemon_last_job_timestamp` | gauge | Last successful daemon job |
+| `daemon_active_jobs` | gauge | Currently active daemon jobs |
+| `process_cpu_seconds_total` | counter | CPU time consumed (built-in) |
+| `process_resident_memory_bytes` | gauge | RSS memory usage (built-in) |
+| `process_virtual_memory_bytes` | gauge | Virtual memory usage (built-in) |
+| `process_start_time_seconds` | gauge | Process start time (built-in) |
+| `errors_total` | counter | Errors by type and endpoint |
 
-**Request IDs:** Every request gets a unique `request_id` (UUID) that is included in all log lines, enabling correlation between metrics and logs.
+**Request IDs:** Every request gets a unique `request_id` (UUID) bound via `structlog.contextvars`, included in all log lines, enabling correlation between metrics and logs.
 
 ### Logs
 
