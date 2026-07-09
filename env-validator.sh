@@ -49,6 +49,20 @@ OPTIONAL_VARS=(
     "NEXT_PUBLIC_API_URL"
 )
 
+# Monitoring variables (required in prod)
+MONITORING_REQUIRED_VARS=(
+    "GRAFANA_ADMIN_PASSWORD"
+    "ALERTMANAGER_DISCORD_WEBHOOK_URL"
+)
+
+# Default values that should never be used in production
+DEFAULT_GRAFANA_PASSWORDS=(
+    "password"
+    "admin"
+    "changeme"
+    "grafana"
+)
+
 # NAS volume paths (required only when using prod-nas)
 NAS_VARS=(
     "POSTGRESQL_DATA_PATH"
@@ -131,6 +145,7 @@ validate_nas_vars() {
 
 validate_compose_files() {
     local deploy_dir="$1"
+    local mode="$2"
     local compose_files=(
         "$deploy_dir/docker-compose.yml"
         "$deploy_dir/docker-compose.prod.yml"
@@ -147,14 +162,84 @@ validate_compose_files() {
         fi
     done
 
-    # Check for prod-nas override
-    if [[ -f "$deploy_dir/docker-compose.prod-nas.yml" ]]; then
-        write_success "Found: docker-compose.prod-nas.yml"
+    # Monitoring compose files (required for prod)
+    local monitoring_files=(
+        "$deploy_dir/docker-compose.monitoring.yml"
+        "$deploy_dir/docker-compose.monitoring.ports.yml"
+        "$deploy_dir/docker-compose.monitoring.traefik.yml"
+    )
+
+    if [[ "$mode" == "prod" ]]; then
+        for mf in "${monitoring_files[@]}"; do
+            if [[ -f "$mf" ]]; then
+                write_success "Found: $(basename "$mf")"
+            else
+                write_error "Missing monitoring compose file: $(basename "$mf")"
+                has_errors=1
+            fi
+        done
+    fi
+}
+
+validate_monitoring() {
+    local file="$1"
+    local mode="$2"
+
+    if [[ "$mode" != "prod" ]]; then
+        return 0
     fi
 
-    # Check for prod-traefik override
-    if [[ -f "$deploy_dir/docker-compose.prod-traefik.yml" ]]; then
-        write_success "Found: docker-compose.prod-traefik.yml"
+    write_info "=== Monitoring (prod) ==="
+
+    set -a
+    source "$file"
+    set +a
+
+    local has_errors=0
+
+    # Check GRAFANA_ADMIN_PASSWORD is set and not a default value
+    if [[ -z "${GRAFANA_ADMIN_PASSWORD}" ]]; then
+        write_error "GRAFANA_ADMIN_PASSWORD is not set (required for prod)"
+        has_errors=1
+    else
+        local is_default=false
+        for default_pass in "${DEFAULT_GRAFANA_PASSWORDS[@]}"; do
+            if [[ "${GRAFANA_ADMIN_PASSWORD}" == "$default_pass" ]]; then
+                is_default=true
+                break
+            fi
+        done
+        if [[ "$is_default" == "true" ]]; then
+            write_error "GRAFANA_ADMIN_PASSWORD is set to a default value — change it for production"
+            has_errors=1
+        else
+            write_success "GRAFANA_ADMIN_PASSWORD is set (non-default)"
+        fi
+    fi
+
+    # Check ALERTMANAGER_DISCORD_WEBHOOK_URL is set
+    if [[ -z "${ALERTMANAGER_DISCORD_WEBHOOK_URL}" ]]; then
+        write_error "ALERTMANAGER_DISCORD_WEBHOOK_URL is not set (required for prod alerts)"
+        write_warning "Alerts will be silently dropped without a Discord webhook"
+        has_errors=1
+    else
+        if [[ "${ALERTMANAGER_DISCORD_WEBHOOK_URL}" == *"YOUR_WEBHOOK"* ]] || [[ "${ALERTMANAGER_DISCORD_WEBHOOK_URL}" == *"your-webhook"* ]]; then
+            write_warning "ALERTMANAGER_DISCORD_WEBHOOK_URL appears to be a placeholder — update before deploying"
+        else
+            write_success "ALERTMANAGER_DISCORD_WEBHOOK_URL is set"
+        fi
+    fi
+
+    # Check LOG_FORMAT is set
+    if [[ -z "${LOG_FORMAT}" ]]; then
+        write_warning "LOG_FORMAT is not set (default: text). Set to 'json' for prod with Loki"
+    fi
+
+    if [[ "$has_errors" -eq 0 ]]; then
+        write_success "Monitoring configuration valid for prod"
+        return 0
+    else
+        return 1
     fi
 }
 
@@ -219,8 +304,19 @@ validate_frontend() {
 
 validate_deploy() {
     local deploy_dir="$SCRIPT_DIR"
+    local mode="dev"
 
     write_info "=== Deploy ==="
+
+    # Detect mode from .env
+    if [[ -f "$deploy_dir/.env" ]]; then
+        set -a
+        source "$deploy_dir/.env"
+        set +a
+        if [[ -n "${ENV}" ]]; then
+            mode="$ENV"
+        fi
+    fi
 
     # Check .env file
     local env_file="$deploy_dir/.env"
@@ -256,6 +352,11 @@ validate_deploy() {
         write_success "Systemd service generator found"
     else
         write_warning "Systemd service generator not found"
+    fi
+
+    # Validate monitoring for prod
+    if [[ -f "$env_file" ]]; then
+        validate_monitoring "$env_file" "$mode" || return 1
     fi
 }
 
@@ -299,6 +400,15 @@ print_summary() {
     echo "  cd $SCRIPT_DIR"
     echo "  ./deploy.sh up dev"
     echo
+    echo "Monitoring access (dev):"
+    echo "  Grafana:      http://localhost:3001 (use --monitoring-ports)"
+    echo "  Prometheus:   http://localhost:9090 (use --monitoring-ports)"
+    echo "  Loki:         http://localhost:3100 (use --monitoring-ports)"
+    echo
+    echo "Monitoring access (prod):"
+    echo "  Grafana:      https://grafana.graveboards.net (TLS + auth)"
+    echo "  Other services: internal-only (no host ports)"
+    echo
 }
 
 # Main execution
@@ -312,7 +422,18 @@ main() {
     validate_backend
     validate_frontend
     validate_deploy
-    validate_compose_files "$SCRIPT_DIR"
+
+    # Detect mode for compose file validation
+    local mode="dev"
+    if [[ -f "$SCRIPT_DIR/.env" ]]; then
+        set -a
+        source "$SCRIPT_DIR/.env"
+        set +a
+        if [[ -n "${ENV}" ]]; then
+            mode="$ENV"
+        fi
+    fi
+    validate_compose_files "$SCRIPT_DIR" "$mode"
 
     # Validate NAS vars if .env has them
     if [[ -f "$SCRIPT_DIR/.env" ]]; then

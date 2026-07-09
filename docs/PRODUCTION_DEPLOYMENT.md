@@ -38,7 +38,7 @@ git clone https://github.com/graveboards/graveboards-deploy.git
 cd ~/graveboards/graveboards-deploy
 
 # Create .env from template
-cp .env.example .env
+cp .env.prod.example .env
 
 # Edit .env with production values
 vim .env
@@ -66,7 +66,24 @@ OSU_CLIENT_SECRET=<your-client-secret>
 
 # Base URL (your domain)
 BASE_URL=https://graveboards.example.com
+
+# Logging (JSON for Loki compatibility)
+LOG_FORMAT=json
 ```
+
+### Monitoring Configuration (prod required)
+
+```env
+# Grafana admin credentials (password must not be a default value)
+GRAFANA_ADMIN_USER=admin
+GRAFANA_ADMIN_PASSWORD=<strong-password>
+GRAFANA_ROOT_URL=https://grafana.graveboards.net
+
+# Alertmanager Discord webhook (required for alerts)
+ALERTMANAGER_DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/YOUR_ID/YOUR_TOKEN
+```
+
+A DNS `A` record for `grafana.graveboards.net` pointing to your server is required.
 
 ### Volume Configuration
 
@@ -119,17 +136,10 @@ sudo chown -R $USER:$USER /mnt/nas/graveboards
 
 **Step 4: Deploy with NAS override**
 
-Use the NAS-specific docker-compose configuration:
-
 ```bash
-# Build images
 ./deploy.sh build prod
-
-# Start services with NAS volumes
-docker compose -f docker-compose.prod.yml -f docker-compose.prod-nas.yml up -d
+./deploy.sh up prod --nas
 ```
-
-**Note:** The `docker-compose.prod-nas.yml` file overrides the default volume paths with your NAS configuration. It should be used in combination with `docker-compose.prod.yml` using the `-f` flag.
 
 **Generate secure secrets:**
 
@@ -144,6 +154,8 @@ openssl rand -base64 32
 chmod +x env-validator.sh
 ./env-validator.sh
 ```
+
+The validator checks required variables, monitoring secrets (in prod), and compose file existence.
 
 ### 4. Build and Deploy
 
@@ -160,29 +172,24 @@ chmod +x env-validator.sh
 **Using NAS Volumes (Production):**
 
 ```bash
-# Build all images
 ./deploy.sh build prod
-
-# Start services with NAS volumes
-docker compose -f docker-compose.prod.yml -f docker-compose.prod-nas.yml up -d
+./deploy.sh up prod --nas
 ```
-
-**Note:** For NAS deployments, ensure your `.env.prod` file has the `POSTGRESQL_DATA_PATH`, `REDIS_DATA_PATH`, and `INSTANCE_DATA_PATH` variables set to your NAS mount points (e.g., `/mnt/nas/graveboards/postgresql`).
 
 ### HTTPS with Traefik
 
-For automatic TLS via Let's Encrypt, use the Traefik override:
+For automatic TLS via Let's Encrypt on both the frontend and Grafana:
 
 ```bash
-# 1. Update the domain in docker-compose.prod-traefik.yml
-vim docker-compose.prod-traefik.yml
+# 1. Update domains in docker-compose.prod.traefik.yml
+vim docker-compose.prod.traefik.yml
 
 # 2. Start with Traefik
-docker compose -f docker-compose.prod.yml -f docker-compose.prod-traefik.yml up -d
+./deploy.sh up prod --traefik
 ```
 
 The Traefik configuration provides:
-- Automatic TLS certificate provisioning (Let's Encrypt)
+- Automatic TLS certificate provisioning (Let's Encrypt) for `graveboards.net` and `grafana.graveboards.net`
 - Security headers (HSTS, CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy)
 - Rate limiting (10 requests/second)
 - WebSocket support
@@ -225,11 +232,12 @@ curl -f http://localhost:3000
 
 ### 1. Enable HTTPS with Traefik (Recommended)
 
-Configure `docker-compose.prod-traefik.yml` with your domain:
+Configure `docker-compose.prod.traefik.yml` with your domains:
 
 ```yaml
-# In docker-compose.prod-traefik.yml, set:
+# In docker-compose.prod.traefik.yml, set:
 # traefik.http.routers.graveboards-frontend.rule=Host(`graveboards.example.com`)
+# traefik.http.routers.graveboards-grafana.rule=Host(`grafana.example.com`)
 ```
 
 Traefik handles Let's Encrypt certificate provisioning automatically. No manual certbot setup required.
@@ -259,6 +267,30 @@ sudo dpkg-reconfigure -plow unattended-upgrades
 
 ## Monitoring and Logging
 
+### Architecture
+
+The monitoring stack runs **internal-only** in production (no host ports published):
+
+```
+Frontend (grafana.graveboards.net via Traefik, TLS + auth)
+    │
+    ├─► Grafana (public, authenticated)
+    │       ├─► Prometheus (internal datasource)
+    │       └─► Loki (internal datasource)
+    │
+Backend (/metrics, internal only, single scrape target)
+    │
+    ├─► Prometheus (scrapes backend + exporters)
+    ├─► Alertmanager (native discord_configs)
+    ├─► Loki (stores logs shipped by Promtail)
+    ├─► Promtail (ships Docker json-file logs to Loki)
+    ├─► node-exporter (host metrics)
+    ├─► postgres-exporter (DB metrics)
+    └─► redis-exporter (Redis metrics)
+```
+
+Only Grafana is publicly reachable. Prometheus, Loki, Alertmanager, and exporters are internal-only, accessible via Grafana datasources or SSH tunnels.
+
 ### Health Checks
 
 The deployment includes automatic health checks:
@@ -273,28 +305,47 @@ View logs:
 
 ```bash
 # All services
-./deploy.sh logs [dev|prod|prod-nas|test] all
+./deploy.sh logs prod all
 
 # Specific service
 ./deploy.sh logs prod backend
 ./deploy.sh logs prod frontend
-./deploy.sh logs prod postgres
+./deploy.sh logs prod postgresql
 ./deploy.sh logs prod redis
 
 # Follow logs
 ./deploy.sh logs prod backend -f
 ```
 
+**Log format:** JSON in prod (`LOG_FORMAT=json`), colored console in dev. Every line includes `request_id` for correlation with Loki.
+
+Query Loki from Grafana Explore:
+```logql
+{service="backend", level="error"} | json | request_id="your-request-id"
+```
+
 ### Monitoring Configuration
 
-A `monitoring.yml` file defines alerting rules for:
+`monitoring/prometheus/alerts.yml` defines alerting rules for:
 - Service down (5m critical)
 - High latency (2000ms warning)
 - Database connection loss (1m critical)
-- Redis connection loss (1m critical)
+- Redis down (via redis-exporter, 1m critical)
 - High error rate (>5% warning)
+- All scrape targets down (`up == 0`)
+
+Alerts are delivered to Discord via native `discord_configs`.
 
 ## Backups
+
+### What Gets Backed Up
+
+The `backup.sh` script backs up:
+- **PostgreSQL database** (primary, rotated: 7 most recent)
+- **Grafana dashboards and datasources** (exported via API)
+- **Alertmanager silences** (exported via API)
+
+**Not backed up by default:** Prometheus TSDB and Loki data are regenerable from app metrics and Docker logs. If retention matters, back up `prometheus-data` and `loki-data` volumes separately.
 
 ### Manual Backup
 
@@ -308,8 +359,6 @@ cd ~/graveboards/graveboards-deploy
 ./backup.sh /path/to/backups
 ```
 
-Backups are stored as `graveboards_YYYY-MM-DD_HH-MM-SS.sql.gz` and the script keeps the 7 most recent backups.
-
 ### Automated Backup (Cron)
 
 See `crontab.example` for a ready-to-use cron configuration:
@@ -317,7 +366,7 @@ See `crontab.example` for a ready-to-use cron configuration:
 ```bash
 crontab -e
 
-# Daily backup at 2:00 AM (backups stored in /path/to/backups)
+# Daily backup at 2:00 AM
 0 2 * * * /path/to/graveboards-deploy/backup.sh /path/to/backups >> /var/log/graveboards-backup.log 2>&1
 ```
 
@@ -346,10 +395,11 @@ For automatic startup on boot, use the interactive service generator:
 
 This script will:
 1. Select compose configuration (prod, prod-nas, prod-traefik)
-2. Configure environment variables
-3. Choose between system-wide (sudo) or user-level systemd
-4. Generate and install the service file
-5. Optionally enable on boot and start the service
+2. Optionally enable the monitoring stack
+3. Configure environment variables
+4. Choose between system-wide (sudo) or user-level systemd
+5. Generate and install the service file
+6. Optionally enable on boot and start the service
 
 ### Service Management
 
@@ -392,11 +442,8 @@ git pull
 **For NAS deployments:**
 
 ```bash
-# Stop services
-docker compose -f docker-compose.prod.yml -f docker-compose.prod-nas.yml down
-
-# Restart with NAS
-docker compose -f docker-compose.prod.yml -f docker-compose.prod-nas.yml up -d
+./deploy.sh down prod --nas
+./deploy.sh up prod --nas
 ```
 
 ### View Service Status
@@ -415,14 +462,14 @@ docker compose -f docker-compose.prod.yml -f docker-compose.prod-nas.yml up -d
 ### View Logs
 
 ```bash
-./deploy.sh logs prod [backend|frontend|postgres|redis|all]
+./deploy.sh logs prod [backend|frontend|postgresql|redis|all]
 ```
 
 **Examples:**
 ```bash
 ./deploy.sh logs prod all      # View prod all logs
 ./deploy.sh logs prod backend  # View prod backend logs only
-./deploy.sh logs prod postgres # View prod postgres logs
+./deploy.sh logs prod postgresql # View prod postgres logs
 ```
 
 ## Troubleshooting
@@ -481,7 +528,7 @@ docker build --target production -t frontend:latest graveboards-frontend/
 docker compose -f docker-compose.prod.yml exec backend python -m manage status
 
 # Verify config
-grep -E "^(JWT_SECRET_KEY|POSTGRESQL|REDIS)" .env.prod
+grep -E "^(JWT_SECRET_KEY|POSTGRESQL|REDIS)" .env
 ```
 
 ## Scaling
@@ -493,6 +540,8 @@ For higher traffic, consider:
 1. **Database Read Replicas**: Add PostgreSQL read replicas for load balancing
 2. **Load Balancer**: Use Traefik or HAProxy for frontend load balancing
 3. **Multiple Backend Instances**: Run multiple backend containers behind load balancer
+
+**Important:** The backend uses a single `prometheus_client` registry in-process. If multi-worker is ever needed, switch to `prometheus_client` multiprocess mode or a sidecar exporter — do not silently add `--workers`.
 
 ### Vertical Scaling
 
@@ -510,17 +559,19 @@ backend:
 ## Security Checklist
 
 - [ ] Changed all default secrets (SESSION_SECRET, JWT_SECRET_KEY, POSTGRESQL_PASSWORD)
+- [ ] Set a strong `GRAFANA_ADMIN_PASSWORD` (not a default value)
+- [ ] Set `ALERTMANAGER_DISCORD_WEBHOOK_URL` for alerts
 - [ ] Enabled HTTPS with Traefik (valid certificate auto-provisioned)
 - [ ] Disabled DEBUG mode
 - [ ] Disabled DISABLE_SECURITY
-- [ ] Set up Traefik with your domain in `docker-compose.prod-traefik.yml`
+- [ ] Set up Traefik with your domain in `docker-compose.prod.traefik.yml`
 - [ ] Set up automatic backups
 - [ ] Enabled health checks
-- [ ] Configured logging (json-file driver, 10m max, 3 files)
-- [ ] Created monitoring alerts (see `monitoring.yml`)
+- [ ] Created monitoring alerts (see `monitoring/prometheus/alerts.yml`)
 - [ ] Updated osu! API callback URL
 - [ ] Set up rate limiting (configured in Traefik, 10 req/s)
 - [ ] Configured CORS headers
+- [ ] Verified no monitoring host ports are exposed in production
 
 ## Support
 
@@ -535,8 +586,8 @@ After successful deployment:
 
 1. Configure DNS to point to your server
 2. Set up Traefik with your domain (see HTTPS section above)
-3. Configure monitoring (see `monitoring.yml`)
+3. Verify Grafana is accessible at `https://grafana.graveboards.net`
 4. Test OAuth flow
 5. Create first user account
 6. Set up regular backups
-7. Configure monitoring and alerting
+7. Test Discord alert delivery

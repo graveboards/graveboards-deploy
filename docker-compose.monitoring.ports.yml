@@ -1,0 +1,28 @@
+# Graveboards Development - Monitoring Host Ports Override
+# Usage: docker compose -f docker-compose.yml -f docker-compose.monitoring.yml -f docker-compose.monitoring.ports.yml up -d
+#
+# This file publishes monitoring service ports to the host for local development access.
+# DO NOT use this file in production — it defeats the security model of internal-only monitoring.
+#
+# In production, monitoring services are only reachable via Grafana (datasources) or SSH tunnel.
+
+services:
+    prometheus:
+        ports:
+            - "9090:9090"
+
+    grafana:
+        ports:
+            - "3001:3000"
+
+    alertmanager:
+        ports:
+            - "9093:9093"
+
+    loki:
+        ports:
+            - "3100:3100"
+
+    node-exporter:
+        ports:
+            - "9100:9100"

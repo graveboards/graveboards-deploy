@@ -1,0 +1,211 @@
+# Graveboards Production Deployment - Monitoring Override
+# Usage: docker compose -f docker-compose.prod.yml -f docker-compose.monitoring.yml up -d
+#
+# This file adds Prometheus, Grafana, Alertmanager, Loki, Promtail, and
+# infrastructure exporters for comprehensive observability.
+
+services:
+    prometheus:
+        image: prom/prometheus:latest
+        container_name: graveboards-prometheus
+        command:
+            - "--config.file=/etc/prometheus/prometheus.yml"
+            - "--storage.tsdb.path=/prometheus"
+            - "--storage.tsdb.retention.time=30d"
+            - "--web.console.libraries=/etc/prometheus/console_libraries"
+            - "--web.console.templates=/etc/prometheus/consoles"
+            - "--web.enable-lifecycle"
+            - "--web.listen-address=0.0.0.0:9090"
+        volumes:
+            - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+            - prometheus-data:/prometheus
+        networks:
+            - app
+        healthcheck:
+            test: ["CMD-SHELL", "wget -q --spider http://localhost:9090/-/healthy || exit 1"]
+            interval: 15s
+            timeout: 5s
+            retries: 3
+            start_period: 10s
+        restart: unless-stopped
+        deploy:
+            resources:
+                limits:
+                    cpus: '1'
+                    memory: 1G
+                reservations:
+                    cpus: '0.5'
+                    memory: 512M
+
+    grafana:
+        image: grafana/grafana:latest
+        container_name: graveboards-grafana
+        environment:
+            - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+            - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+            - GF_USERS_ALLOW_SIGN_UP=false
+            - GF_SERVER_ROOT_URL=${GRAFANA_ROOT_URL:-http://localhost:3001}
+            - GF_AUTH_ANONYMOUS_ENABLED=false
+            - GF_LOG_LEVEL=warn
+        volumes:
+            - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+            - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+            - grafana-data:/var/lib/grafana
+        networks:
+            - app
+        depends_on:
+            prometheus:
+                condition: service_healthy
+        healthcheck:
+            test: ["CMD-SHELL", "wget -q --spider http://localhost:3000/api/health || exit 1"]
+            interval: 15s
+            timeout: 5s
+            retries: 3
+            start_period: 30s
+        restart: unless-stopped
+        deploy:
+            resources:
+                limits:
+                    cpus: '0.5'
+                    memory: 512M
+                reservations:
+                    cpus: '0.25'
+                    memory: 256M
+
+    alertmanager:
+        image: prom/alertmanager:latest
+        container_name: graveboards-alertmanager
+        environment:
+            - ALERTMANAGER_DISCORD_WEBHOOK_URL=${ALERTMANAGER_DISCORD_WEBHOOK_URL}
+        entrypoint: ["/bin/sh", "/entrypoint.sh"]
+        volumes:
+            - ./monitoring/alertmanager/entrypoint.sh:/entrypoint.sh:ro
+            - ./monitoring/alertmanager:/etc/alertmanager:ro
+            - alertmanager-data:/alertmanager
+        networks:
+            - app
+        healthcheck:
+            test: ["CMD-SHELL", "wget -q --spider http://localhost:9093/-/healthy || exit 1"]
+            interval: 15s
+            timeout: 5s
+            retries: 3
+            start_period: 10s
+        restart: unless-stopped
+        deploy:
+            resources:
+                limits:
+                    cpus: '0.25'
+                    memory: 256M
+                reservations:
+                    cpus: '0.1'
+                    memory: 128M
+
+    loki:
+        image: grafana/loki:latest
+        container_name: graveboards-loki
+        command:
+            - "-config.file=/etc/loki/loki.yml"
+        volumes:
+            - ./monitoring/loki/loki.yml:/etc/loki/loki.yml:ro
+            - loki-data:/loki
+        networks:
+            - app
+        depends_on:
+            - alertmanager
+        restart: unless-stopped
+        deploy:
+            resources:
+                limits:
+                    cpus: '0.5'
+                    memory: 512M
+                reservations:
+                    cpus: '0.25'
+                    memory: 256M
+
+    promtail:
+        image: grafana/promtail:latest
+        container_name: graveboards-promtail
+        volumes:
+            - /var/lib/docker/containers:/var/lib/docker/containers:ro
+            - /var/run/docker.sock:/var/run/docker.sock:ro
+            - ./monitoring/promtail:/etc/promtail:ro
+        networks:
+            - app
+        command: -config.file=/etc/promtail/config.yml
+        depends_on:
+            loki:
+                condition: service_started
+        restart: unless-stopped
+        deploy:
+            resources:
+                limits:
+                    cpus: '0.25'
+                    memory: 256M
+                reservations:
+                    cpus: '0.1'
+                    memory: 128M
+
+    node-exporter:
+        image: prom/node-exporter:latest
+        container_name: graveboards-node-exporter
+        command:
+            - "--path.rootfs=/host"
+            - "--web.listen-address=0.0.0.0:9100"
+        volumes:
+            - /:/host:ro,rslave
+        networks:
+            - app
+        restart: unless-stopped
+        deploy:
+            resources:
+                limits:
+                    cpus: '0.25'
+                    memory: 256M
+                reservations:
+                    cpus: '0.1'
+                    memory: 128M
+
+    postgres-exporter:
+        image: prometheuscommunity/postgres-exporter:latest
+        container_name: graveboards-postgres-exporter
+        environment:
+            - DATA_SOURCE_NAME=postgresql://${POSTGRESQL_USERNAME:-postgres}:${POSTGRESQL_PASSWORD}@postgresql:5432/${POSTGRESQL_DATABASE:-graveboards_prod}?sslmode=disable
+        networks:
+            - app
+        restart: unless-stopped
+        deploy:
+            resources:
+                limits:
+                    cpus: '0.25'
+                    memory: 256M
+                reservations:
+                    cpus: '0.1'
+                    memory: 128M
+
+    redis-exporter:
+        image: oliver006/redis_exporter:latest
+        container_name: graveboards-redis-exporter
+        environment:
+            - REDIS_ADDR=redis:6379
+            - REDIS_PASSWORD=${REDIS_PASSWORD}
+        networks:
+            - app
+        restart: unless-stopped
+        deploy:
+            resources:
+                limits:
+                    cpus: '0.25'
+                    memory: 256M
+                reservations:
+                    cpus: '0.1'
+                    memory: 128M
+
+volumes:
+    prometheus-data:
+    grafana-data:
+    alertmanager-data:
+    loki-data:
+
+networks:
+    app:
+        driver: bridge

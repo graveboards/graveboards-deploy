@@ -1,34 +1,24 @@
 #!/usr/bin/env bash
 
-# Graveboards Deployment Script for Linux/Mac
-# Usage: ./deploy.sh [command] [mode] [service]
+# Graveboards Deployment Script
+# Usage: ./deploy.sh [command] [args...]
 #
 # Commands:
-#   up [mode]               - Start services (default: dev)
-#   down [mode]             - Stop services (default: all)
-#   build [mode]            - Build images (default: dev)
-#   logs [mode] [service]   - View logs (default: dev all)
-#   test                    - Run tests
-#   status                  - Show status
-#   help                    - Show this help
-#   clean                   - Remove volumes and images
+#   up [mode] [--follow|-f] [service...]  - Start services
+#   down [mode] [service...]              - Stop services
+#   build [mode] [service...]             - Build images
+#   pull [repo...]                        - Git pull repositories
+#   force-pull [repo...]                  - Force reset repositories to origin
+#   deploy [mode] [--follow|-f]           - Full pipeline: down + pull + build + up
+#   logs [mode] [service]                 - View logs
+#   test                                  - Run tests
+#   status                                - Show status
+#   clean                                 - Remove volumes and images
+#   help                                  - Show this help
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-COMPOSE_PROCESS_PID=""
-
-cleanup() {
-    if [[ -n "$COMPOSE_PROCESS_PID" ]] && kill -0 "$COMPOSE_PROCESS_PID" 2>/dev/null; then
-        write_info "Stopping services..."
-        docker-compose -f "$SCRIPT_DIR/docker-compose.yml" down >/dev/null 2>&1 || true
-        docker-compose -f "$SCRIPT_DIR/docker-compose.prod.yml" down >/dev/null 2>&1 || true
-        docker-compose -f "$SCRIPT_DIR/docker-compose.test.yml" --profile test down >/dev/null 2>&1 || true
-    fi
-}
-
-trap cleanup EXIT INT TERM
-
 BACKEND_DIR="$SCRIPT_DIR/../graveboards-backend"
 FRONTEND_DIR="$SCRIPT_DIR/../graveboards-frontend"
 
@@ -45,14 +35,196 @@ write_error() { printf "${ColorError}[ERROR]${ColorReset} %b\n" "$1"; }
 write_warning() { printf "${ColorWarning}[WARN]${ColorReset} %b\n" "$1"; }
 
 # =========================
-# Step 1: Auto-generate .env and bootstrap files if they don't exist
+# Docker Compose command detection
 # =========================
 
-    generate_config_files() {
-    write_info "Configuration files not found. Starting interactive setup..."
+if docker compose version >/dev/null 2>&1; then
+    COMPOSE_CMD=(docker compose)
+elif command -v docker-compose >/dev/null 2>&1; then
+    COMPOSE_CMD=(docker-compose)
+else
+    write_error "Docker Compose is not installed"
+    write_info "Install Docker Compose v2: https://docs.docker.com/compose/install/"
+    exit 1
+fi
+
+# =========================
+# Compose wrapper function
+# =========================
+
+compose() {
+    local mode="$1"
+    local noMonitoring="${2:-false}"
+    local nas="${3:-false}"
+    local traefik="${4:-false}"
+    local monitoringPorts="${5:-false}"
+    local monitoringTraefik="${6:-false}"
+    shift 6 || true
+    local compose_files=()
+
+    case "$mode" in
+        dev)
+            compose_files=("-f" "$SCRIPT_DIR/docker-compose.yml")
+            ;;
+        prod)
+            compose_files=("-f" "$SCRIPT_DIR/docker-compose.prod.yml")
+            if [[ "$nas" == "true" ]]; then
+                compose_files+=("-f" "$SCRIPT_DIR/docker-compose.prod.nas.yml")
+            fi
+            if [[ "$traefik" == "true" ]]; then
+                compose_files+=("-f" "$SCRIPT_DIR/docker-compose.prod.traefik.yml")
+            fi
+            ;;
+        test)
+            compose_files=("-f" "$SCRIPT_DIR/docker-compose.test.yml")
+            ;;
+        *)
+            write_error "Unknown mode: $mode"
+            exit 1
+            ;;
+    esac
+
+    if [[ "$mode" != "test" ]] && [[ "$noMonitoring" != "true" ]]; then
+        compose_files+=("-f" "$SCRIPT_DIR/docker-compose.monitoring.yml")
+        if [[ "$mode" == "dev" ]] && [[ "$monitoringPorts" == "true" ]]; then
+            compose_files+=("-f" "$SCRIPT_DIR/docker-compose.monitoring.ports.yml")
+        fi
+        if [[ "$monitoringTraefik" == "true" ]]; then
+            compose_files+=("-f" "$SCRIPT_DIR/docker-compose.monitoring.traefik.yml")
+        fi
+    fi
+
+    "${COMPOSE_CMD[@]}" "${compose_files[@]}" "$@"
+}
+
+# =========================
+# Git helper functions
+# =========================
+
+git_pull_repo() {
+    local repo="$1"
+    write_info "Pulling $(basename "$repo")..."
+    (
+        cd "$repo"
+        git pull --ff-only
+    ) || {
+        write_error "Failed to pull $(basename "$repo")."
+        return 1
+    }
+    write_success "Updated $(basename "$repo")"
+}
+
+git_force_pull_repo() {
+    local repo="$1"
+    write_info "Force updating $(basename "$repo")..."
+    (
+        cd "$repo"
+        local branch
+        branch=$(git rev-parse --abbrev-ref HEAD)
+        git fetch origin
+        git reset --hard "origin/$branch"
+        git clean -fd
+    )
+    write_success "Force updated $(basename "$repo")"
+}
+
+# =========================
+# Spec cache cleanup
+# =========================
+
+get_spec_cache_path() {
+    local instance_data_path
+    instance_data_path=$(grep '^INSTANCE_DATA_PATH=' "$SCRIPT_DIR/.env" 2>/dev/null | cut -d'=' -f2- | tr -d '[:space:]')
+    if [[ -n "$instance_data_path" ]]; then
+        echo "$instance_data_path/.spec_cache.pkl"
+    fi
+}
+
+cleanup_spec_cache() {
+    local spec_cache
+    spec_cache=$(get_spec_cache_path)
+    if [[ -n "$spec_cache" ]] && [[ -f "$spec_cache" ]]; then
+        write_info "Deleting spec cache: $spec_cache"
+        rm -f "$spec_cache"
+    fi
+}
+
+# =========================
+# Cleanup on exit / Ctrl+C
+# =========================
+
+COMPOSE_PROCESS_PID=""
+
+cleanup() {
+    if [[ -n "$COMPOSE_PROCESS_PID" ]] && kill -0 "$COMPOSE_PROCESS_PID" 2>/dev/null; then
+        write_info "Stopping services..."
+        "${COMPOSE_CMD[@]}" -f "$SCRIPT_DIR/docker-compose.yml" \
+                             -f "$SCRIPT_DIR/docker-compose.prod.yml" \
+                             -f "$SCRIPT_DIR/docker-compose.monitoring.yml" \
+                             down --remove-orphans >/dev/null 2>&1 || true
+    fi
+}
+
+trap cleanup EXIT INT TERM
+
+# =========================
+# Interactive config generation
+# =========================
+
+# Config files this script manages. A file is only ever (re)generated when it is
+# missing or empty — an existing, non-empty file is ALWAYS preserved, so running
+# against a populated repo (e.g. a configured production .env) never destroys it.
+_config_targets() {
+    printf '%s\n' \
+        "$BACKEND_DIR/config/bootstrap.yaml" \
+        "$BACKEND_DIR/config/bootstrap.test.yaml" \
+        "$BACKEND_DIR/.env" \
+        "$BACKEND_DIR/.env.test" \
+        "$SCRIPT_DIR/.env"
+}
+
+# A target is "missing" (safe to write) when absent or zero-length.
+_needs_content() { [[ ! -s "$1" ]]; }
+
+CREATED_FILES=()
+SKIPPED_FILES=()
+
+# Write stdin to $1 only if it is missing/empty; otherwise preserve the existing
+# file and discard stdin. Outcome is recorded for the summary. Never fails.
+write_config_file() {
+    local target="$1"
+    if _needs_content "$target"; then
+        mkdir -p "$(dirname "$target")"
+        cat > "$target"
+        CREATED_FILES+=("$target")
+    else
+        cat > /dev/null
+        SKIPPED_FILES+=("$target")
+    fi
+}
+
+generate_config_files() {
+    # Prompt only when at least one managed file is missing; otherwise no-op.
+    local target
+    local -a missing=()
+    while IFS= read -r target; do
+        if _needs_content "$target"; then
+            missing+=("$target")
+        fi
+    done < <(_config_targets)
+
+    if [[ ${#missing[@]} -eq 0 ]]; then
+        return 0
+    fi
+
+    CREATED_FILES=()
+    SKIPPED_FILES=()
+
+    write_info "Missing configuration detected — starting interactive setup."
+    write_info "Existing, non-empty files are preserved; only the gaps are filled."
     echo
 
-    # Generate 32-character random alphanumeric secrets
+    local JWT_SECRET_KEY JWT_SECRET_KEY_TEST SESSION_SECRET
     JWT_SECRET_KEY=$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 32)
     JWT_SECRET_KEY_TEST=$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 32)
     SESSION_SECRET=$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 32)
@@ -69,25 +241,25 @@ write_warning() { printf "${ColorWarning}[WARN]${ColorReset} %b\n" "$1"; }
     read -p "Enter your osu user ID to add yourself as an admin: " OSU_USER_ID
     echo
 
-    DISABLE_SECURITY="false"
+    local DISABLE_SECURITY="false"
     read -p "Disable security for dev convenience? (y/N): " choice
     case "$choice" in
         y|Y) DISABLE_SECURITY="true" ;;
         *) DISABLE_SECURITY="false" ;;
     esac
 
-    # Master queue configuration
+    local MASTER_QUEUE_NAME
     read -p "Master queue name [Graveboards Queue]: " MASTER_QUEUE_NAME
     MASTER_QUEUE_NAME="${MASTER_QUEUE_NAME:-Graveboards Queue}"
 
+    local MASTER_QUEUE_DESCRIPTION
     read -p "Master queue description [Master queue for beatmaps to receive leaderboards]: " MASTER_QUEUE_DESCRIPTION
     MASTER_QUEUE_DESCRIPTION="${MASTER_QUEUE_DESCRIPTION:-Master queue for beatmaps to receive leaderboards}"
 
-    # Extra queues
     declare -a EXTRA_QUEUE_NAMES
     declare -a EXTRA_QUEUE_DESCRIPTIONS
     declare -a EXTRA_QUEUE_USER_IDS
-    EXTRA_QUEUE_COUNT=0
+    local EXTRA_QUEUE_COUNT=0
 
     read -p "Add extra queues? (y/N): " add_queues
     if [[ "$add_queues" =~ ^[yY]$ ]]; then
@@ -106,9 +278,8 @@ write_warning() { printf "${ColorWarning}[WARN]${ColorReset} %b\n" "$1"; }
         done
     fi
 
-    # Additional admin users
     declare -a EXTRA_ADMIN_IDS
-    EXTRA_ADMIN_COUNT=0
+    local EXTRA_ADMIN_COUNT=0
 
     read -p "Add additional admin users? (y/N): " add_admins
     if [[ "$add_admins" =~ ^[yY]$ ]]; then
@@ -121,10 +292,9 @@ write_warning() { printf "${ColorWarning}[WARN]${ColorReset} %b\n" "$1"; }
         done
     fi
 
-    # --- Generate bootstrap.yaml for dev ---
-    mkdir -p "$BACKEND_DIR/config"
-
-    {
+    # --- Generate bootstrap.yaml for dev (only if missing) ---
+    local bootstrap_yaml
+    bootstrap_yaml=$({
         echo "master_queue:"
         echo "  name: \"$MASTER_QUEUE_NAME\""
         echo "  description: \"$MASTER_QUEUE_DESCRIPTION\""
@@ -162,36 +332,37 @@ write_warning() { printf "${ColorWarning}[WARN]${ColorReset} %b\n" "$1"; }
         echo "  - seed_users"
         echo "  - seed_api_keys"
         echo "  - seed_queues"
-    } > "$BACKEND_DIR/config/bootstrap.yaml"
+    })
+    write_config_file "$BACKEND_DIR/config/bootstrap.yaml" <<< "$bootstrap_yaml"
 
-    # --- Generate bootstrap.test.yaml ---
-    {
-        echo "master_queue:"
-        echo "  name: \"Graveboards Queue\""
-        echo "  description: \"Master queue for beatmaps to receive leaderboards\""
-        echo "  user_id: 1"
-        echo "extra_queues: []"
-        echo "initial_users:"
-        echo "  - user_id: 1"
-        echo "    roles: [admin]"
-        echo "    generate_api_key: true"
-        echo "    enable_score_fetcher: true"
-        echo "  - user_id: 2"
-        echo "    roles: [admin]"
-        echo "    generate_api_key: true"
-        echo "    enable_score_fetcher: true"
-        echo "initial_roles:"
-        echo "  - admin"
-        echo "setup_steps:"
-        echo "  - create_database"
-        echo "  - seed_roles"
-        echo "  - seed_users"
-        echo "  - seed_api_keys"
-        echo "  - seed_queues"
-    } > "$BACKEND_DIR/config/bootstrap.test.yaml"
+    # --- Generate bootstrap.test.yaml (only if missing) ---
+    write_config_file "$BACKEND_DIR/config/bootstrap.test.yaml" <<'EOF'
+master_queue:
+  name: "Graveboards Queue"
+  description: "Master queue for beatmaps to receive leaderboards"
+  user_id: 1
+extra_queues: []
+initial_users:
+  - user_id: 1
+    roles: [admin]
+    generate_api_key: true
+    enable_score_fetcher: true
+  - user_id: 2
+    roles: [admin]
+    generate_api_key: true
+    enable_score_fetcher: true
+initial_roles:
+  - admin
+setup_steps:
+  - create_database
+  - seed_roles
+  - seed_users
+  - seed_api_keys
+  - seed_queues
+EOF
 
-    # Create .env for direct Python dev mode (connects to Docker DB/Redis via localhost)
-     cat > "$BACKEND_DIR/.env" <<EOF
+    # Create .env for direct Python dev mode (only if missing)
+    write_config_file "$BACKEND_DIR/.env" <<EOF
 DEBUG=true
 DISABLE_SECURITY=$DISABLE_SECURITY
 ENV=dev
@@ -212,8 +383,8 @@ REDIS_PASSWORD=
 REDIS_DB=0
 EOF
 
-    # Create .env.test for test mode (isolated DB/Redis)
-    cat > "$BACKEND_DIR/.env.test" <<EOF
+    # Create .env.test (only if missing)
+    write_config_file "$BACKEND_DIR/.env.test" <<EOF
 DEBUG=true
 DISABLE_SECURITY=false
 ENV=test
@@ -234,8 +405,8 @@ REDIS_PASSWORD=
 REDIS_DB=15
 EOF
 
-    # Create .env for deploy orchestrator
-    cat > "$SCRIPT_DIR/.env" <<EOF
+    # Create .env for deploy orchestrator (only if missing)
+    write_config_file "$SCRIPT_DIR/.env" <<EOF
 # BACKEND
 DEBUG=true
 DISABLE_SECURITY=$DISABLE_SECURITY
@@ -245,7 +416,6 @@ JWT_SECRET_KEY=$JWT_SECRET_KEY
 JWT_ALGORITHM=HS256
 OSU_CLIENT_ID=$OSU_CLIENT_ID
 OSU_CLIENT_SECRET=$OSU_CLIENT_SECRET
-POSTGRESQL_PASSWORD=postgres
 POSTGRESQL_HOST=postgres
 POSTGRESQL_PORT=5432
 POSTGRESQL_USERNAME=postgres
@@ -265,12 +435,19 @@ APP_URL=http://localhost:3000
 EOF
 
     echo
-    write_success "[OK] Configuration files created:"
-    echo "  - $BACKEND_DIR/.env (dev mode with localhost DB/Redis)"
-    echo "  - $BACKEND_DIR/.env.test (test mode with isolated DB/Redis)"
-    echo "  - $BACKEND_DIR/config/bootstrap.yaml (dev bootstrap config)"
-    echo "  - $BACKEND_DIR/config/bootstrap.test.yaml (test bootstrap config)"
-    echo "  - $SCRIPT_DIR/.env (deploy orchestrator config)"
+    local f
+    if [[ ${#CREATED_FILES[@]} -gt 0 ]]; then
+        write_success "Created ${#CREATED_FILES[@]} configuration file(s):"
+        for f in "${CREATED_FILES[@]}"; do
+            echo "  + $f"
+        done
+    fi
+    if [[ ${#SKIPPED_FILES[@]} -gt 0 ]]; then
+        write_info "Preserved ${#SKIPPED_FILES[@]} existing file(s) — left untouched:"
+        for f in "${SKIPPED_FILES[@]}"; do
+            echo "  = $f"
+        done
+    fi
     echo
     echo "You have been added as admin user $OSU_USER_ID."
     if [[ $EXTRA_QUEUE_COUNT -gt 0 ]]; then
@@ -282,45 +459,47 @@ EOF
     echo
 }
 
-# Check if .env files exist, generate if not
-if [[ ! -f "$BACKEND_DIR/.env" ]] || [[ ! -f "$SCRIPT_DIR/.env" ]]; then
-    generate_config_files
-fi
+# Fill any missing config files. No-op (and silent) when everything already exists,
+# so this is safe to run on every invocation without clobbering populated configs.
+generate_config_files
 
 # =========================
-# Step 2: Check Docker in PATH
+# Help
 # =========================
-
-test_docker_installed() {
-    command -v docker >/dev/null 2>&1
-}
-
-test_docker_running() {
-    docker info >/dev/null 2>&1
-}
 
 show_help() {
     cat << EOF
-Graveboards Deployment Script for Linux/Mac
-Usage: ./deploy.sh [command] [mode] [service]
+Graveboards Deployment Script
+
+Usage: ./deploy.sh [command] [args...]
 
 Commands:
-  up [mode]             - Start services (default: dev)
-  down [mode]           - Stop services (default: all)
-  build [mode]          - Build images (default: dev)
-  logs [mode] [service] - View logs (default: dev all)
-  test                  - Run tests
-  status                - Show status
-  clean                 - Remove volumes and images
-  help                  - Show this help
+  up [mode] [--follow|-f] [--no-monitoring] [--nas] [--traefik] [--monitoring-ports] [service...]  - Start services (default: dev)
+  down [mode] [--no-monitoring] [--nas] [--traefik] [service...]              - Stop services (default: all)
+  build [mode] [--no-monitoring] [--nas] [--traefik] [service...]             - Build images (default: dev)
+  pull [repo...]                                          - Git pull repos (all or: backend, frontend, deploy)
+  force-pull [repo...]                                    - Force reset repos to origin
+  deploy [mode] [--follow|-f] [--no-monitoring] [--nas] [--traefik] [--monitoring-ports] - Full pipeline
+  logs [mode] [--no-monitoring] [--nas] [--traefik] [service] - View logs (default: dev all)
+  test                                                    - Run tests
+  status                                                  - Show status
+  clean                                                   - Remove volumes and images
+  help                                                    - Show this help
 
 Modes:
   dev       - Development mode (default)
   prod      - Production mode (Docker volumes)
-  prod-nas  - Production mode (NAS volumes)
   test      - Testing mode
 
-Services:
+Flags:
+  --follow, -f            - Run in foreground (up, deploy)
+  --no-monitoring         - Skip monitoring stack
+  --nas                   - Include NAS volume overrides (prod only)
+  --traefik               - Include Traefik overrides for frontend + Grafana (prod only, requires traefik-proxy network)
+  --monitoring-ports      - Publish monitoring ports to host (dev only, for local access to Prometheus/Grafana/Loki)
+  --monitoring-traefik    - Include Traefik routes for monitoring services (prod only)
+
+Services (for up, down, build, logs):
   all      - All services
   backend  - Backend service
   frontend - Frontend service
@@ -328,214 +507,388 @@ Services:
   redis    - Redis cache
 
 Examples:
-  ./deploy.sh up dev            # Start dev mode
-  ./deploy.sh up prod           # Start prod mode
-  ./deploy.sh down prod         # Stop prod mode
-  ./deploy.sh build test        # Build test images
-  ./deploy.sh logs dev          # View dev logs (all services)
-  ./deploy.sh logs dev backend  # View dev backend logs only
-  ./deploy.sh logs prod all     # View prod all logs
-  ./deploy.sh logs test backend # View test backend logs only
+  ./deploy.sh up dev                           # Start dev mode (detached + follow logs)
+  ./deploy.sh up dev --follow                  # Start dev mode (foreground)
+  ./deploy.sh up dev --monitoring-ports        # Start dev with monitoring ports on host
+  ./deploy.sh up dev backend                   # Start only backend in dev
+  ./deploy.sh up prod                          # Start prod (no NAS, no Traefik, monitoring internal-only)
+  ./deploy.sh up prod --nas                    # Start prod with NAS volumes
+  ./deploy.sh up prod --traefik                # Start prod with Traefik (Grafana on grafana.graveboards.net)
+  ./deploy.sh up prod --nas --traefik          # Start prod with NAS + Traefik
+  ./deploy.sh down prod                        # Stop prod mode
+  ./deploy.sh build test                       # Build test images
+  ./deploy.sh pull                             # Pull all repos
+  ./deploy.sh pull backend deploy              # Pull specific repos
+  ./deploy.sh force-pull                       # Force update all repos
+  ./deploy.sh deploy prod --nas --traefik      # Full prod deployment with NAS + Traefik
+  ./deploy.sh deploy prod --follow             # Full deployment with foreground logs
+  ./deploy.sh logs dev backend                 # View dev backend logs
+  ./deploy.sh test                             # Run tests
+  ./deploy.sh status                           # Show status
+  ./deploy.sh clean                            # Remove volumes and images
 
 For more information, see README.md
 EOF
 }
 
-generate_prod_env() {
-    if [[ ! -f "$SCRIPT_DIR/.env.prod" ]] && [[ ! -f "$SCRIPT_DIR/.env" ]]; then
-        write_error "Production mode requires .env.prod or .env file with credentials"
-        write_warning "Copy .env.prod.example to .env.prod and fill in your values:"
-        echo "  cp .env.prod.example .env.prod"
-        echo "  vim .env.prod"
-        exit 1
+# =========================
+# Docker checks
+# =========================
+
+if ! command -v docker >/dev/null 2>&1; then
+    write_error "Docker is not installed"
+    write_info "Please install Docker: https://docs.docker.com/get-docker/"
+    exit 1
+fi
+
+if ! docker info >/dev/null 2>&1; then
+    write_error "Docker daemon is not running"
+    write_info "Please start Docker"
+    exit 1
+fi
+
+# =========================
+# Command argument parsing
+# =========================
+
+Command="${1:-up}"
+shift || true
+
+parse_mode_and_flags() {
+    local -n _mode=$1
+    local -n _follow=$2
+    local -n _noMonitoring=$3
+    local -n _nas=$4
+    local -n _traefik=$5
+    local -n _monitoringPorts=$6
+    local -n _monitoringTraefik=$7
+    local -n _extra=$8
+    shift 8
+
+    _mode="dev"
+    _follow="false"
+    _noMonitoring="false"
+    _nas="false"
+    _traefik="false"
+    _monitoringPorts="false"
+    _monitoringTraefik="false"
+    _extra=()
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            dev|prod|test)
+                if [[ "$_mode" == "dev" ]]; then
+                    _mode="$1"
+                else
+                    _extra+=("$1")
+                fi
+                shift
+                ;;
+            --follow|-f)
+                _follow="true"
+                shift
+                ;;
+            --no-monitoring)
+                _noMonitoring="true"
+                shift
+                ;;
+            --nas)
+                _nas="true"
+                shift
+                ;;
+            --traefik)
+                _traefik="true"
+                shift
+                ;;
+            --monitoring-ports)
+                _monitoringPorts="true"
+                shift
+                ;;
+            --monitoring-traefik)
+                _monitoringTraefik="true"
+                shift
+                ;;
+            *)
+                _extra+=("$1")
+                shift
+                ;;
+        esac
+    done
+}
+
+# =========================
+# Command implementations
+# =========================
+
+cmd_up() {
+    local Mode Follow NoMonitoring Nas Traefik MonitoringPorts MonitoringTraefik
+    local -a ExtraServices
+    parse_mode_and_flags Mode Follow NoMonitoring Nas Traefik MonitoringPorts MonitoringTraefik ExtraServices "$@"
+
+    if [[ "$Traefik" == "true" ]]; then
+        if ! docker network inspect traefik-proxy &>/dev/null; then
+            write_error "Traefik proxy network not found!"
+            write_info "Make sure Traefik is running and has created the 'traefik-proxy' network"
+            exit 1
+        fi
+    fi
+
+    if [[ "$Follow" == "false" ]]; then
+        write_info "Starting Graveboards in $Mode mode..."
+        if [[ "$Mode" != "test" ]]; then
+            compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik" "$MonitoringPorts" "$MonitoringTraefik" up -d "${ExtraServices[@]}"
+            write_success "Services started!"
+            compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik" "$MonitoringPorts" "$MonitoringTraefik" logs -f "${ExtraServices[@]}"
+        else
+            compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik" "$MonitoringPorts" "$MonitoringTraefik" up --profile test --build "${ExtraServices[@]}"
+        fi
+    else
+        write_info "Starting Graveboards in $Mode mode (foreground)..."
+        if [[ "$Mode" != "test" ]]; then
+            compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik" "$MonitoringPorts" "$MonitoringTraefik" up --build "${ExtraServices[@]}" &
+            COMPOSE_PROCESS_PID=$!
+            wait $COMPOSE_PROCESS_PID
+        else
+            compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik" "$MonitoringPorts" "$MonitoringTraefik" --profile test up --build "${ExtraServices[@]}" &
+            COMPOSE_PROCESS_PID=$!
+            wait $COMPOSE_PROCESS_PID
+        fi
     fi
 }
 
-start_services() {
-    local mode="$1"
-    
-    write_info "Starting Graveboards in $mode mode..."
-    
-    case "$mode" in
-        dev)
-            docker-compose -f "$SCRIPT_DIR/docker-compose.yml" up --build &
-            COMPOSE_PROCESS_PID=$!
-            wait $COMPOSE_PROCESS_PID
-            ;;
-        prod)
-            generate_prod_env
-            docker-compose -f "$SCRIPT_DIR/docker-compose.prod.yml" up --build &
-            COMPOSE_PROCESS_PID=$!
-            wait $COMPOSE_PROCESS_PID
-            ;;
-        prod-nas)
-            generate_prod_env
-            docker-compose -f "$SCRIPT_DIR/docker-compose.prod.yml" -f "$SCRIPT_DIR/docker-compose.prod-nas.yml" up --build &
-            COMPOSE_PROCESS_PID=$!
-            wait $COMPOSE_PROCESS_PID
-            ;;
-        test)
-            docker-compose -f "$SCRIPT_DIR/docker-compose.test.yml" up --profile test --build &
-            COMPOSE_PROCESS_PID=$!
-            wait $COMPOSE_PROCESS_PID
-            ;;
-    esac
-}
+cmd_down() {
+    local Mode NoMonitoring Nas Traefik MonitoringPorts MonitoringTraefik
+    local -a ExtraServices
+    parse_mode_and_flags Mode _ NoMonitoring Nas Traefik MonitoringPorts MonitoringTraefik ExtraServices "$@"
 
-stop_services() {
-    local mode="$1"
-    
     write_info "Stopping Graveboards services..."
-    
-    case "$mode" in
-        all)
-            docker-compose -f "$SCRIPT_DIR/docker-compose.yml" down
-            docker-compose -f "$SCRIPT_DIR/docker-compose.prod.yml" down
-            docker-compose -f "$SCRIPT_DIR/docker-compose.prod-nas.yml" down
-            docker-compose -f "$SCRIPT_DIR/docker-compose.test.yml" --profile test down
-            ;;
-        dev)
-            docker-compose -f "$SCRIPT_DIR/docker-compose.yml" down
-            ;;
-        prod)
-            docker-compose -f "$SCRIPT_DIR/docker-compose.prod.yml" down
-            ;;
-        prod-nas)
-            docker-compose -f "$SCRIPT_DIR/docker-compose.prod.yml" -f "$SCRIPT_DIR/docker-compose.prod-nas.yml" down
-            ;;
-        test)
-            docker-compose -f "$SCRIPT_DIR/docker-compose.test.yml" --profile test down
-            ;;
-    esac
+
+    if [[ ${#ExtraServices[@]} -gt 0 ]]; then
+        compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik" "$MonitoringPorts" "$MonitoringTraefik" down "${ExtraServices[@]}"
+    else
+        compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik" "$MonitoringPorts" "$MonitoringTraefik" down
+    fi
+    write_success "Services stopped!"
 }
 
-build_images() {
-    local mode="$1"
-    
-    write_info "Building Graveboards images for $mode mode..."
-    
-    case "$mode" in
-        dev)
-            docker-compose -f "$SCRIPT_DIR/docker-compose.yml" build
-            ;;
-        prod)
-            docker-compose -f "$SCRIPT_DIR/docker-compose.prod.yml" build
-            ;;
-        prod-nas)
-            docker-compose -f "$SCRIPT_DIR/docker-compose.prod.yml" build
-            ;;
-        test)
-            docker-compose -f "$SCRIPT_DIR/docker-compose.test.yml" --profile test build
-            ;;
-    esac
+cmd_build() {
+    local Mode NoMonitoring Nas Traefik MonitoringPorts MonitoringTraefik
+    local -a ExtraServices
+    parse_mode_and_flags Mode _ NoMonitoring Nas Traefik MonitoringPorts MonitoringTraefik ExtraServices "$@"
+
+    write_info "Building Graveboards images for $Mode mode..."
+
+    if [[ ${#ExtraServices[@]} -gt 0 ]]; then
+        compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik" "$MonitoringPorts" "$MonitoringTraefik" build "${ExtraServices[@]}"
+    else
+        compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik" "$MonitoringPorts" "$MonitoringTraefik" build
+    fi
+
+    cleanup_spec_cache
+
+    write_success "Images built!"
 }
 
-view_logs() {
-    local mode="$1"
-    local service="${2:-all}"
-    
-    case "$mode" in
-        dev)
-            local compose_file="$SCRIPT_DIR/docker-compose.yml"
-            ;;
-        prod)
-            local compose_file="$SCRIPT_DIR/docker-compose.prod.yml"
-            ;;
-        prod-nas)
-            local compose_file="$SCRIPT_DIR/docker-compose.prod.yml"
-            ;;
-        test)
-            local compose_file="$SCRIPT_DIR/docker-compose.test.yml"
-            ;;
-        *)
-            write_info "Using default dev mode..."
-            local compose_file="$SCRIPT_DIR/docker-compose.yml"
-            mode="dev"
-            ;;
-    esac
-    
-    case "$service" in
+cmd_pull() {
+    if [[ $# -eq 0 ]]; then
+        write_info "Pulling all repositories..."
+        git_pull_repo "$BACKEND_DIR" || return 1
+        git_pull_repo "$FRONTEND_DIR" || return 1
+        git_pull_repo "$SCRIPT_DIR" || return 1
+    else
+        for repo in "$@"; do
+            case "$repo" in
+                backend)
+                    git_pull_repo "$BACKEND_DIR" || return 1
+                    ;;
+                frontend)
+                    git_pull_repo "$FRONTEND_DIR" || return 1
+                    ;;
+                deploy)
+                    git_pull_repo "$SCRIPT_DIR" || return 1
+                    ;;
+                *)
+                    write_error "Unknown repository: $repo"
+                    write_info "Valid repositories: backend, frontend, deploy"
+                    return 1
+                    ;;
+            esac
+        done
+    fi
+    write_success "Repositories updated!"
+}
+
+cmd_force_pull() {
+    if [[ $# -eq 0 ]]; then
+        write_info "Force updating all repositories..."
+        git_force_pull_repo "$BACKEND_DIR"
+        git_force_pull_repo "$FRONTEND_DIR"
+        git_force_pull_repo "$SCRIPT_DIR"
+    else
+        for repo in "$@"; do
+            case "$repo" in
+                backend)
+                    git_force_pull_repo "$BACKEND_DIR"
+                    ;;
+                frontend)
+                    git_force_pull_repo "$FRONTEND_DIR"
+                    ;;
+                deploy)
+                    git_force_pull_repo "$SCRIPT_DIR"
+                    ;;
+                *)
+                    write_error "Unknown repository: $repo"
+                    write_info "Valid repositories: backend, frontend, deploy"
+                    exit 1
+                    ;;
+            esac
+        done
+    fi
+    write_success "Repositories force updated!"
+}
+
+cmd_deploy() {
+    local Mode Follow NoMonitoring Nas Traefik MonitoringPorts MonitoringTraefik
+    local -a Extra
+    parse_mode_and_flags Mode Follow NoMonitoring Nas Traefik MonitoringPorts MonitoringTraefik Extra "$@"
+
+    if [[ "$Traefik" == "true" ]]; then
+        if ! docker network inspect traefik-proxy &>/dev/null; then
+            write_error "Traefik proxy network not found!"
+            write_info "Make sure Traefik is running and has created the 'traefik-proxy' network"
+            exit 1
+        fi
+    fi
+
+    write_info "Stopping services..."
+    compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik" "$MonitoringPorts" "$MonitoringTraefik" down
+
+    write_info "Pulling latest code..."
+    if ! cmd_pull; then
+        write_error "Deployment aborted because one or more repositories could not be updated."
+        exit 1
+    fi
+
+    write_info "Building images..."
+    compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik" "$MonitoringPorts" "$MonitoringTraefik" build
+    cleanup_spec_cache
+
+    write_info "Starting services..."
+    if [[ "$Follow" == "true" ]]; then
+        compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik" "$MonitoringPorts" "$MonitoringTraefik" up --build &
+        COMPOSE_PROCESS_PID=$!
+        wait $COMPOSE_PROCESS_PID
+    else
+        compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik" "$MonitoringPorts" "$MonitoringTraefik" up -d
+        write_success "Services started!"
+        compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik" "$MonitoringPorts" "$MonitoringTraefik" logs -f
+    fi
+}
+
+cmd_logs() {
+    local Mode NoMonitoring Nas Traefik MonitoringPorts MonitoringTraefik
+    local Service="all"
+    local -a Extra
+    parse_mode_and_flags Mode _ NoMonitoring Nas Traefik MonitoringPorts MonitoringTraefik Extra "$@"
+
+    if [[ ${#Extra[@]} -gt 0 ]]; then
+        Service="${Extra[0]}"
+    fi
+
+    case "$Service" in
         all)
-            docker-compose -f "$compose_file" logs -f
+            compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik" "$MonitoringPorts" "$MonitoringTraefik" logs -f
             ;;
         backend)
-            docker-compose -f "$compose_file" logs -f backend
+            compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik" "$MonitoringPorts" "$MonitoringTraefik" logs -f backend
             ;;
         frontend)
-            docker-compose -f "$compose_file" logs -f frontend
+            compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik" "$MonitoringPorts" "$MonitoringTraefik" logs -f frontend
             ;;
         postgres|postgresql)
-            docker-compose -f "$compose_file" logs -f postgresql
+            compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik" "$MonitoringPorts" "$MonitoringTraefik" logs -f postgresql
             ;;
         redis)
-            docker-compose -f "$compose_file" logs -f redis
+            compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik" "$MonitoringPorts" "$MonitoringTraefik" logs -f redis
             ;;
         *)
-            write_info "Service '$service' not found. Showing all logs..."
-            docker-compose -f "$compose_file" logs -f
+            write_info "Service '$Service' not found. Showing all logs..."
+            compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik" "$MonitoringPorts" "$MonitoringTraefik" logs -f
             ;;
     esac
 }
 
-run_tests() {
+cmd_test() {
     write_info "Running Graveboards tests in Docker..."
-    
+
     write_info "Building and running test services (PostgreSQL, Redis, and backend)..."
-    docker-compose -f "$SCRIPT_DIR/docker-compose.test.yml" --profile test up --build -d
-    
+    compose test --profile test up --build -d
+
     write_info "Waiting for backend test container to complete..."
-    docker-compose -f "$SCRIPT_DIR/docker-compose.test.yml" logs -f backend
-    
+    compose test logs -f backend
+
     write_info "Test completed, cleaning up..."
-    docker-compose -f "$SCRIPT_DIR/docker-compose.test.yml" down -v --remove-orphans
+    compose test down -v --remove-orphans
 }
 
-show_status() {
+cmd_status() {
     write_info "Graveboards Service Status"
     printf "${ColorInfo}==========================${ColorReset}\n"
-    
+
     printf "\n%s" "Backend Repository:"
     if [[ -d "$BACKEND_DIR" ]]; then
         write_success "Found at $BACKEND_DIR"
     else
         write_error "Not found at $BACKEND_DIR"
     fi
-    
+
     printf "\n%s" "Frontend Repository:"
     if [[ -d "$FRONTEND_DIR" ]]; then
         write_success "Found at $FRONTEND_DIR"
     else
         write_error "Not found at $FRONTEND_DIR"
     fi
-    
+
+    printf "\n%s" "Deploy Repository:"
+    if [[ -d "$SCRIPT_DIR" ]]; then
+        write_success "Found at $SCRIPT_DIR"
+    else
+        write_error "Not found at $SCRIPT_DIR"
+    fi
+
     printf "\n%s" "Docker:"
-    if test_docker_installed; then
+    if command -v docker >/dev/null 2>&1; then
         write_success "Docker is installed"
     else
         write_error "Docker is not installed"
     fi
-    
-    if test_docker_running; then
+
+    if docker info >/dev/null 2>&1; then
         write_success "Docker daemon is running"
     else
         write_error "Docker daemon is not running"
     fi
-    
+
     printf "\n%s\n" "Container Status:"
     docker ps -a --filter "name=graveboards" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
 }
 
-clean_environment() {
+cmd_clean() {
     write_warning "This will remove all volumes and images! (excluding prod)"
     read -p "Are you sure? (yes/no): " confirm
-    
+
     if [[ "$confirm" == "yes" ]]; then
         write_info "Removing volumes and images..."
-        docker-compose -f "$SCRIPT_DIR/docker-compose.yml" down -v
-        docker-compose -f "$SCRIPT_DIR/docker-compose.test.yml" --profile test down -v
-        docker-compose -f "$SCRIPT_DIR/docker-compose.prod.yml" down
+        "${COMPOSE_CMD[@]}" -f "$SCRIPT_DIR/docker-compose.yml" \
+                             -f "$SCRIPT_DIR/docker-compose.monitoring.yml" \
+                             down -v --remove-orphans
+        "${COMPOSE_CMD[@]}" -f "$SCRIPT_DIR/docker-compose.test.yml" \
+                             down -v --remove-orphans
+        "${COMPOSE_CMD[@]}" -f "$SCRIPT_DIR/docker-compose.prod.yml" \
+                             -f "$SCRIPT_DIR/docker-compose.prod.traefik.yml" \
+                             -f "$SCRIPT_DIR/docker-compose.monitoring.yml" \
+                             down --remove-orphans
 
-        # Remove images
         docker rmi -f $(docker images -q graveboards* 2>/dev/null) 2>/dev/null || true
         write_success "Cleaned up environment"
     else
@@ -543,64 +896,46 @@ clean_environment() {
     fi
 }
 
+# =========================
 # Main execution
-printf "${ColorInfo}Graveboards Deployment Script for Linux/Mac${ColorReset}\n"
-printf "${ColorInfo}==========================================${ColorReset}\n\n"
+# =========================
 
-# Check Docker
-if ! test_docker_installed; then
-    write_error "Docker is not installed"
-    write_info "Please install Docker: https://docs.docker.com/get-docker/"
-    exit 1
-fi
+printf "${ColorInfo}Graveboards Deployment Script${ColorReset}\n"
+printf "${ColorInfo}=============================${ColorReset}\n\n"
 
-if ! test_docker_running; then
-    write_error "Docker daemon is not running"
-    write_info "Please start Docker"
-    exit 1
-fi
-
-# Check arguments
-if [[ $# -eq 0 ]]; then
-    Command="up"
-    Mode="dev"
-else
-    Command="$1"
-    shift
-    if [[ "$Command" == "logs" ]]; then
-        Mode="${1:-all}"
-        shift
-        Service="$1"
-    else
-        Mode="${1:-dev}"
-    fi
-fi
-
-# Execute command
 case "$Command" in
-    help)
-        show_help
-        ;;
     up)
-        start_services "$Mode"
+        cmd_up "$@"
         ;;
     down)
-        stop_services "$Mode"
+        cmd_down "$@"
         ;;
     build)
-        build_images "$Mode"
+        cmd_build "$@"
+        ;;
+    pull)
+        cmd_pull "$@" || exit 1
+        ;;
+    force-pull)
+        cmd_force_pull "$@"
+        ;;
+    deploy)
+        cmd_deploy "$@"
         ;;
     logs)
-        view_logs "$Mode" "$Service"
+        cmd_logs "$@"
         ;;
     test)
-        run_tests
+        cmd_test
         ;;
     status)
-        show_status
+        cmd_status
         ;;
     clean)
-        clean_environment
+        cmd_clean
+        ;;
+    help)
+        show_help
         ;;
     *)
         write_error "Unknown command: $Command"

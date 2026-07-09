@@ -23,10 +23,23 @@ cd graveboards-deploy
 This will:
 - Prompt for osu! OAuth credentials, admin user ID, and optional extra queues/users
 - Create `.env` files with auto-generated secrets
-- Start all services (PostgreSQL, Redis, Backend, Frontend)
+- Start all services (PostgreSQL, Redis, Backend, Frontend, monitoring stack)
 - Build frontend with hot-reload support
 
-### 3. Verify Installation
+### 3. Access Monitoring (dev)
+
+Monitoring is enabled by default. To access the monitoring UIs locally, publish ports:
+
+```bash
+./deploy.sh up dev --monitoring-ports
+```
+
+- Grafana: http://localhost:3001 (default: admin / password)
+- Prometheus: http://localhost:9090
+- Alertmanager: http://localhost:9093
+- Loki: http://localhost:3100
+
+### 4. Verify Installation
 
 ```bash
 # Check status
@@ -37,20 +50,20 @@ curl http://localhost:8000/api/v1/health
 curl http://localhost:3000
 ```
 
-### 4. Development Commands
+### 5. Development Commands
 
 ```bash
 # Stop services
 ./deploy.sh down
 
 # View logs
-./deploy.sh logs [dev|prod|prod-nas|test] [backend|frontend|postgres|redis|all]
+./deploy.sh logs [dev|prod|test] [backend|frontend|postgresql|redis|all]
 
 # Restart
 ./deploy.sh up dev
 ```
 
-### 5. Run Tests
+### 6. Run Tests
 
 ```bash
 # Via orchestrator (isolated DB/Redis)
@@ -61,7 +74,7 @@ cd graveboards-backend
 make test
 ```
 
-### 6. Docker Build Options
+### 7. Docker Build Options
 
 The frontend uses a multi-stage Dockerfile with two main stages:
 
@@ -89,6 +102,7 @@ docker build --target production -t frontend:latest graveboards-frontend/
 - Server with Docker Engine 24+
 - 4GB+ RAM recommended
 - Domain name (for HTTPS via Traefik)
+- DNS `A` record for `grafana.<your-domain>` (for Grafana access)
 
 ### 2. Clone and Setup
 
@@ -103,11 +117,11 @@ cd graveboards-deploy
 ### 3. Configure Environment
 
 ```bash
-# Create .env.prod from template
-cp .env.prod.example .env.prod
+# Create .env from prod template
+cp .env.prod.example .env
 
 # Edit with production values
-vim .env.prod
+vim .env
 ```
 
 **Important: Change these values for production:**
@@ -118,6 +132,14 @@ POSTGRESQL_PASSWORD=<openssl-rand-base64-32>
 DEBUG=false
 DISABLE_SECURITY=false
 BASE_URL=https://your-domain.com
+LOG_FORMAT=json
+```
+
+**Monitoring (required for prod):**
+```env
+GRAFANA_ADMIN_PASSWORD=<strong-password>
+ALERTMANAGER_DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/YOUR_ID/YOUR_TOKEN
+GRAFANA_ROOT_URL=https://grafana.your-domain.com
 ```
 
 ### 4. Validate Configuration
@@ -136,16 +158,19 @@ BASE_URL=https://your-domain.com
 ./deploy.sh up prod
 
 # Or with NAS volumes
-docker-compose -f docker-compose.prod.yml -f docker-compose.prod-nas.yml up -d
+./deploy.sh up prod --nas
 ```
 
 ### 6. Set Up HTTPS with Traefik (Recommended)
 
-Use the Traefik override for automatic Let's Encrypt TLS:
+Use the Traefik override for automatic Let's Encrypt TLS on both the frontend and Grafana:
 
 ```bash
-# Start with Traefik (update domain in docker-compose.prod-traefik.yml)
-docker-compose -f docker-compose.prod.yml -f docker-compose.prod-traefik.yml up -d
+# Update domains in docker-compose.prod.traefik.yml
+vim docker-compose.prod.traefik.yml
+
+# Start with Traefik
+./deploy.sh up prod --traefik
 ```
 
 The Traefik configuration includes:
@@ -154,10 +179,22 @@ The Traefik configuration includes:
 - Rate limiting (10 req/s)
 - WebSocket support
 
-### 7. Set Up Backups
+### 7. Access Grafana
+
+Grafana is the single public monitoring entry point:
+
+```
+https://grafana.graveboards.net
+```
+
+Log in with the `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD` from `.env`. From Grafana, explore Prometheus and Loki datasources.
+
+Prometheus, Loki, Alertmanager, and exporters are **internal-only** (no host ports in production).
+
+### 8. Set Up Backups
 
 ```bash
-# Test backup (default: stores in ./backups next to this script)
+# Test backup (defaults: stores in ./backups next to this script)
 ./backup.sh
 
 # Or specify a custom backup directory
@@ -168,7 +205,9 @@ crontab -e
 # Add: 0 2 * * * /path/to/graveboards-deploy/backup.sh /path/to/backups >> /var/log/graveboards-backup.log 2>&1
 ```
 
-### 8. Set Up Systemd Service (Optional)
+Backups include PostgreSQL, Grafana dashboards/datasources, and Alertmanager silences.
+
+### 9. Set Up Systemd Service (Optional)
 
 For automatic startup on boot:
 
@@ -178,6 +217,7 @@ For automatic startup on boot:
 
 This interactive script will:
 - Choose compose configuration (prod, prod-nas, prod-traefik)
+- Optionally enable the monitoring stack
 - Set environment variables
 - Choose system-wide or user-level systemd
 - Generate and install the service file
@@ -197,7 +237,7 @@ git pull
 ### View Logs
 
 ```bash
-./deploy.sh logs [dev|prod|prod-nas|test] [backend|frontend|postgres|redis|all]
+./deploy.sh logs [dev|prod|test] [backend|frontend|postgresql|redis|all]
 ```
 
 **Examples:**
@@ -258,7 +298,7 @@ cd graveboards-deploy
 
 1. Configure osu! OAuth callback URL
 2. Set up domain DNS pointing to your server
-3. Configure Traefik with your domain in `docker-compose.prod-traefik.yml`
-4. Set up monitoring (see `monitoring.yml`)
+3. Configure Traefik with your domain in `docker-compose.prod.traefik.yml`
+4. Verify Grafana at `https://grafana.<your-domain>`
 5. Configure backups
 6. Review security checklist in docs/PRODUCTION_DEPLOYMENT.md

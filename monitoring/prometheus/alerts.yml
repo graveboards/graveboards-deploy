@@ -1,0 +1,167 @@
+groups:
+    - name: graveboards-alerts
+      rules:
+          - alert: ServiceDown
+            expr: up{job="graveboards-backend"} == 0
+            for: 2m
+            labels:
+                severity: critical
+            annotations:
+                summary: "Graveboards backend is down"
+                description: "The Graveboards backend service has been unreachable for more than 2 minutes."
+
+          - alert: PrometheusDown
+            expr: up{job="prometheus"} == 0
+            for: 2m
+            labels:
+                severity: critical
+            annotations:
+                summary: "Prometheus is down"
+                description: "Prometheus has been unreachable for more than 2 minutes."
+
+          - alert: AlertmanagerDown
+            expr: up{job="alertmanager"} == 0
+            for: 2m
+            labels:
+                severity: critical
+            annotations:
+                summary: "Alertmanager is down"
+                description: "Alertmanager has been unreachable for more than 2 minutes."
+
+          - alert: NodeExporterDown
+            expr: up{job="node"} == 0
+            for: 2m
+            labels:
+                severity: warning
+            annotations:
+                summary: "Node exporter is down"
+                description: "Node exporter has been unreachable for more than 2 minutes."
+
+          - alert: PostgresExporterDown
+            expr: up{job="postgres"} == 0
+            for: 2m
+            labels:
+                severity: warning
+            annotations:
+                summary: "Postgres exporter is down"
+                description: "Postgres exporter has been unreachable for more than 2 minutes."
+
+          - alert: RedisExporterDown
+            expr: up{job="redis"} == 0
+            for: 2m
+            labels:
+                severity: warning
+            annotations:
+                summary: "Redis exporter is down"
+                description: "Redis exporter has been unreachable for more than 2 minutes."
+
+          - alert: LokiDown
+            expr: loki_process_up == 0
+            for: 2m
+            labels:
+                severity: critical
+            annotations:
+                summary: "Loki is down"
+                description: "Loki has been unreachable for more than 2 minutes."
+
+          - alert: HighLatencyP95
+            expr: histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le)) > 2
+            for: 5m
+            labels:
+                severity: warning
+            annotations:
+                summary: "High API latency (p95 > 2s)"
+                description: "The 95th percentile API response time has exceeded 2 seconds for more than 5 minutes."
+
+          - alert: HighErrorRate
+            expr: |
+                sum(rate(http_requests_total{status_code=~"5.."}[5m])) by (job)
+                /
+                sum(rate(http_requests_total[5m])) by (job)
+                > 0.05
+            for: 5m
+            labels:
+                severity: warning
+            annotations:
+                summary: "High error rate (>5%)"
+                description: "More than 5% of requests are returning 5xx errors over the last 5 minutes."
+
+          - alert: DatabasePoolExhaustion
+            expr: db_pool_checked_out / db_pool_size > 0.9
+            for: 1m
+            labels:
+                severity: critical
+            annotations:
+                summary: "Database connection pool near exhaustion"
+                description: "More than 90% of database connections are checked out."
+
+          - alert: RedisDown
+            expr: redis_up == 0
+            for: 1m
+            labels:
+                severity: critical
+            annotations:
+                summary: "Redis is down"
+                description: "Redis exporter reports Redis is unreachable."
+
+          - alert: PostgresDown
+            expr: pg_up == 0
+            for: 1m
+            labels:
+                severity: critical
+            annotations:
+                summary: "PostgreSQL is down"
+                description: "Postgres exporter reports PostgreSQL is unreachable."
+
+          - alert: OSUAPIDown
+            expr: |
+                sum(rate(osu_api_requests_total{status_code=~"5.."}[5m])) by (job)
+                /
+                sum(rate(osu_api_requests_total[5m])) by (job)
+                > 0.5
+            for: 5m
+            labels:
+                severity: warning
+            annotations:
+                summary: "High osu! API error rate (>50%)"
+                description: "More than 50% of osu! API requests are failing."
+
+          - alert: DaemonStalled
+            expr: time() - daemon_last_job_timestamp > 1800
+            for: 5m
+            labels:
+                severity: warning
+            annotations:
+                summary: "Daemon service has not run in 30 minutes"
+                description: "The {{ $labels.service }} daemon has not completed a run in over 30 minutes."
+
+          - alert: HighCPUUsage
+            expr: rate(process_cpu_seconds_total[5m]) > 0.8
+            for: 5m
+            labels:
+                severity: warning
+            annotations:
+                summary: "High CPU usage (>80%)"
+                description: "The process has been using more than 80% CPU for 5 minutes."
+
+          - alert: HighMemoryUsage
+            expr: process_resident_memory_bytes > 3.5 * 1024 * 1024 * 1024
+            for: 5m
+            labels:
+                severity: warning
+            annotations:
+                summary: "High memory usage (>3.5GB)"
+                description: "The process is using more than 3.5GB of resident memory."
+
+          - alert: RateLimitBlockRateHigh
+            expr: |
+                sum(rate(rate_limit_attempts_total{result="blocked"}[5m])) by (job)
+                /
+                sum(rate(rate_limit_attempts_total[5m])) by (job)
+                > 0.1
+            for: 5m
+            labels:
+                severity: info
+            annotations:
+                summary: "High rate limit block rate (>10%)"
+                description: "More than 10% of requests are being rate limited."

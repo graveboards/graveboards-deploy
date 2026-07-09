@@ -29,11 +29,6 @@ services:
                 reservations:
                     cpus: '1'
                     memory: 2G
-        logging:
-            driver: "json-file"
-            options:
-                max-size: "10m"
-                max-file: "3"
 
     redis:
         image: redis:7-alpine
@@ -61,11 +56,6 @@ services:
                 reservations:
                     cpus: '0.5'
                     memory: 512M
-        logging:
-            driver: "json-file"
-            options:
-                max-size: "10m"
-                max-file: "3"
 
     backend:
         container_name: graveboards-backend
@@ -98,18 +88,21 @@ services:
             - REDIS_USERNAME=${REDIS_USERNAME:-}
             - REDIS_PASSWORD=${REDIS_PASSWORD}
             - REDIS_DB=${REDIS_DB:-0}
+            - LOG_FORMAT=json
         healthcheck:
             test: [ "CMD", "curl", "-f", "http://localhost:8000/api/v1/health" ]
             interval: 60s
             timeout: 10s
             retries: 3
             start_period: 60s
+        logging:
+            driver: json-file
+            options:
+                max-size: "100m"
+                max-file: "3"
         security_opt:
             - no-new-privileges:true
         read_only: true
-        tmpfs:
-            - /tmp
-            - /app/instance/logs
         restart: unless-stopped
         deploy:
             resources:
@@ -119,11 +112,6 @@ services:
                 reservations:
                     cpus: '1'
                     memory: 2G
-        logging:
-            driver: "json-file"
-            options:
-                max-size: "10m"
-                max-file: "3"
 
     frontend:
         container_name: graveboards-frontend
@@ -149,11 +137,6 @@ services:
                 reservations:
                     cpus: '0.5'
                     memory: 1G
-        logging:
-            driver: "json-file"
-            options:
-                max-size: "10m"
-                max-file: "3"
 
 volumes:
     postgresql-prod-data:

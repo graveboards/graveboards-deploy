@@ -1,5 +1,5 @@
 # Graveboards Production Deployment - NAS Volume Override
-# Usage: docker-compose -f docker-compose.prod.yml -f docker-compose.prod-nas.yml up
+# Usage: docker-compose -f docker-compose.prod.yml -f docker-compose.prod.nas.yml up
 # 
 # This file overrides volumes for NAS/external storage deployments.
 # Configure your NAS paths in .env.prod

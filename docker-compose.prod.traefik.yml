@@ -1,0 +1,89 @@
+# Graveboards Production Deployment - Traefik Override
+# Usage: docker compose -f docker-compose.prod.yml -f docker-compose.prod.nas.yml -f docker-compose.prod.traefik.yml up
+#
+# This file adds Traefik labels and network configuration for production deployment.
+# Only Grafana is publicly exposed (via Traefik subdomain with TLS + auth).
+# All other monitoring services are internal-only (no host ports, no Traefik routes).
+
+services:
+    postgresql:
+        networks:
+            - app
+        labels:
+            - "traefik.enable=false"
+
+    redis:
+        networks:
+            - app
+        labels:
+            - "traefik.enable=false"
+
+    backend:
+        networks:
+            - app
+        labels:
+            - "traefik.enable=false"
+
+    frontend:
+        networks:
+            - app
+            - traefik-proxy
+        labels:
+            - "traefik.enable=true"
+            - "traefik.docker.network=traefik-proxy"
+            - "traefik.http.routers.graveboards-frontend.rule=Host(`graveboards.net`)"
+            - "traefik.http.routers.graveboards-frontend.entrypoints=websecure"
+            - "traefik.http.routers.graveboards-frontend.tls=true"
+            - "traefik.http.routers.graveboards-frontend.tls.certresolver=letsencrypt"
+            - "traefik.http.services.graveboards-frontend.loadbalancer.server.port=3000"
+            - "traefik.http.routers.graveboards-frontend.middlewares=security-headers@file,compression@file"
+
+    prometheus:
+        labels:
+            - "traefik.enable=false"
+
+    grafana:
+        networks:
+            - app
+            - traefik-proxy
+        environment:
+            - GF_SERVER_ROOT_URL=${GRAFANA_ROOT_URL:-https://grafana.graveboards.net}
+            - GF_SERVER_SERVE_FROM_SUB_PATH=false
+        labels:
+            - "traefik.enable=true"
+            - "traefik.docker.network=traefik-proxy"
+            - "traefik.http.routers.graveboards-grafana.rule=Host(`grafana.graveboards.net`)"
+            - "traefik.http.routers.graveboards-grafana.entrypoints=websecure"
+            - "traefik.http.routers.graveboards-grafana.tls=true"
+            - "traefik.http.routers.graveboards-grafana.tls.certresolver=letsencrypt"
+            - "traefik.http.services.graveboards-grafana.loadbalancer.server.port=3000"
+            - "traefik.http.routers.graveboards-grafana.middlewares=security-headers@file"
+
+    alertmanager:
+        labels:
+            - "traefik.enable=false"
+
+    loki:
+        labels:
+            - "traefik.enable=false"
+
+    promtail:
+        labels:
+            - "traefik.enable=false"
+
+    node-exporter:
+        labels:
+            - "traefik.enable=false"
+
+    postgres-exporter:
+        labels:
+            - "traefik.enable=false"
+
+    redis-exporter:
+        labels:
+            - "traefik.enable=false"
+
+networks:
+    traefik-proxy:
+        name: traefik-proxy
+        external: true

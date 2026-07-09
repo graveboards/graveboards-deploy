@@ -1,0 +1,53 @@
+# Graveboards Production - Optional Traefik Routes for Prometheus/Alertmanager
+# Usage: docker compose -f docker-compose.prod.yml -f docker-compose.prod.nas.yml -f docker-compose.prod.traefik.yml -f docker-compose.monitoring.yml -f docker-compose.monitoring.traefik.yml up
+#
+# This file adds Traefik routes with basicAuth for Prometheus and Alertmanager.
+# This is Model B exposure — off by default. Most operators only need Grafana (Model A).
+#
+# Prerequisites:
+#   - Set TRAEFIK_BASIC_AUTH_USER and TRAEFIK_BASIC_AUTH_HASH env vars (htpasswd hash)
+#   - Ensure the traefik-proxy external network exists
+#   - The security-headers@file and basic-auth@file middleware collections must exist in Traefik config
+#
+# WARNING: basicAuth via Traefik is weaker than Grafana's built-in auth.
+# Prefer Model A (Grafana-only) unless you specifically need raw Prometheus/Alertmanager UIs.
+
+# To enable, set these environment variables before deploying:
+#   export TRAEFIK_BASIC_AUTH_USER=operator
+#   export TRAEFIK_BASIC_AUTH_HASH=$(htpasswd -nbB operator password | cut -d: -f2)
+#
+# Then add -f docker-compose.monitoring.traefik.yml to your compose command.
+
+services:
+    prometheus:
+        networks:
+            - app
+            - traefik-proxy
+        labels:
+            - "traefik.enable=true"
+            - "traefik.docker.network=traefik-proxy"
+            - "traefik.http.routers.graveboards-prometheus.rule=Host(`prometheus.graveboards.net`)"
+            - "traefik.http.routers.graveboards-prometheus.entrypoints=websecure"
+            - "traefik.http.routers.graveboards-prometheus.tls=true"
+            - "traefik.http.routers.graveboards-prometheus.tls.certresolver=letsencrypt"
+            - "traefik.http.routers.graveboards-prometheus.middlewares=security-headers@file,basic-auth@file"
+            - "traefik.http.services.graveboards-prometheus.loadbalancer.server.port=9090"
+
+    alertmanager:
+        networks:
+            - app
+            - traefik-proxy
+        labels:
+            - "traefik.enable=true"
+            - "traefik.docker.network=traefik-proxy"
+            - "traefik.http.routers.graveboards-alertmanager.rule=Host(`alertmanager.graveboards.net`)"
+            - "traefik.http.routers.graveboards-alertmanager.entrypoints=websecure"
+            - "traefik.http.routers.graveboards-alertmanager.tls=true"
+            - "traefik.http.routers.graveboards-alertmanager.tls.certresolver=letsencrypt"
+            - "traefik.http.routers.graveboards-alertmanager.middlewares=security-headers@file,basic-auth@file"
+            - "traefik.http.services.graveboards-alertmanager.loadbalancer.server.port=9093"
+
+networks:
+    traefik-proxy:
+        name: traefik-proxy
+        external: true
