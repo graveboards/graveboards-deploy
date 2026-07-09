@@ -287,7 +287,7 @@ View logs:
 
 ### Monitoring Configuration
 
-A `monitoring.yml` file defines alerting rules for:
+`monitoring/prometheus/alerts.yml` defines alerting rules for:
 - Service down (5m critical)
 - High latency (2000ms warning)
 - Database connection loss (1m critical)
@@ -517,7 +517,7 @@ backend:
 - [ ] Set up automatic backups
 - [ ] Enabled health checks
 - [ ] Configured logging (json-file driver, 10m max, 3 files)
-- [ ] Created monitoring alerts (see `monitoring.yml`)
+- [ ] Created monitoring alerts (see `monitoring/prometheus/alerts.yml`)
 - [ ] Updated osu! API callback URL
 - [ ] Set up rate limiting (configured in Traefik, 10 req/s)
 - [ ] Configured CORS headers
@@ -535,7 +535,7 @@ After successful deployment:
 
 1. Configure DNS to point to your server
 2. Set up Traefik with your domain (see HTTPS section above)
-3. Configure monitoring (see `monitoring.yml`)
+3. Configure monitoring (see `monitoring/prometheus/alerts.yml`)
 4. Test OAuth flow
 5. Create first user account
 6. Set up regular backups

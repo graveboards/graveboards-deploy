@@ -259,6 +259,6 @@ cd graveboards-deploy
 1. Configure osu! OAuth callback URL
 2. Set up domain DNS pointing to your server
 3. Configure Traefik with your domain in `docker-compose.prod-traefik.yml`
-4. Set up monitoring (see `monitoring.yml`)
+4. Set up monitoring (see `monitoring/prometheus/alerts.yml`)
 5. Configure backups
 6. Review security checklist in docs/PRODUCTION_DEPLOYMENT.md
