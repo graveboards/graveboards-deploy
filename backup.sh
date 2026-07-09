@@ -32,6 +32,7 @@ ColorReset="\033[0m"
 
 write_info() { printf "${ColorInfo}[INFO]${ColorReset} %b\n" "$1"; }
 write_success() { printf "${ColorSuccess}[OK]${ColorReset} %b\n" "$1"; }
+write_warning() { printf "${ColorReset}[WARN]${ColorReset} %b\n" "$1"; }
 write_error() { printf "${ColorError}[ERROR]${ColorReset} %b\n" "$1"; }
 
 # Load environment
