@@ -30,7 +30,7 @@ cd graveboards-deploy
 
 ### Monitoring Stack
 
-Prometheus, Grafana, Alertmanager, Loki, and Promtail are enabled by default for `dev` and `prod` modes:
+Prometheus, Grafana, Alertmanager, Loki, Promtail, and infrastructure exporters are enabled by default for `dev` and `prod` modes:
 
 ```bash
 # Start with monitoring (default)
@@ -38,24 +38,46 @@ Prometheus, Grafana, Alertmanager, Loki, and Promtail are enabled by default for
 ./deploy.sh up prod
 
 # Disable monitoring if needed
-./deploy.sh up dev disable-monitoring
-./deploy.sh up prod disable-monitoring
+./deploy.sh up dev --no-monitoring
+./deploy.sh up prod --no-monitoring
 
 # Or use docker compose directly
 docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d
 docker compose -f docker-compose.prod.yml -f docker-compose.monitoring.yml up -d
 ```
 
-**Monitoring Access:**
+**Monitoring Access (dev):**
+
+Publish ports to the host for local access:
+
+```bash
+./deploy.sh up dev --monitoring-ports
+```
+
 - Grafana: http://localhost:3001 (default: admin / password)
 - Prometheus: http://localhost:9090
 - Alertmanager: http://localhost:9093
 - Loki: http://localhost:3100
 
+**Monitoring Access (prod):**
+
+Only Grafana is publicly reachable, via Traefik with TLS and authentication:
+
+```bash
+./deploy.sh up prod --traefik
+```
+
+- Grafana: https://grafana.graveboards.net (Grafana login required)
+- Prometheus, Loki, Alertmanager, exporters: internal-only (no host ports)
+
+Access internal monitoring services via Grafana datasources or `ssh -L` tunnels.
+
 **Setup Discord alerts (prod):**
+
 1. Create a Discord webhook in your server settings (Server Settings > Integrations > Webhooks)
-2. Add to `.env.prod`: `ALERTMANAGER_DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/YOUR_ID/YOUR_TOKEN`
-3. Restart: `./deploy.sh up prod`
+2. Add to `.env`: `ALERTMANAGER_DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/YOUR_ID/YOUR_TOKEN`
+3. Set a strong Grafana admin password: `GRAFANA_ADMIN_PASSWORD=<strong-password>`
+4. Restart: `./deploy.sh up prod`
 
 ---
 
@@ -63,26 +85,27 @@ docker compose -f docker-compose.prod.yml -f docker-compose.monitoring.yml up -d
 
 ```bash
 cd graveboards-deploy
-./deploy.sh up [mode] [disable-monitoring]  # Start services
-./deploy.sh down [mode]             # Stop services
-./deploy.sh logs [mode] [service]   # View logs
-./deploy.sh test                    # Run tests
-./deploy.sh build [mode]            # Build images
-./deploy.sh status                  # Show status
-./deploy.sh clean                   # Remove volumes and images
-./deploy.sh help                    # Show help
+./deploy.sh up [mode] [--no-monitoring] [--nas] [--traefik] [--monitoring-ports]  # Start services
+./deploy.sh down [mode] [--no-monitoring] [--nas] [--traefik] [service...]              # Stop services
+./deploy.sh logs [mode] [--no-monitoring] [--nas] [--traefik] [service] - View logs
+./deploy.sh test                                                    # Run tests
+./deploy.sh build [mode] [--no-monitoring] [--nas] [--traefik] [service...]             # Build images
+./deploy.sh status                                                  # Show status
+./deploy.sh clean                                                   # Remove volumes and images
+./deploy.sh help                                                    # Show help
 ```
 
 **Modes:**
 - `dev`      - Development (default, hot-reload, monitoring enabled)
 - `prod`     - Production (Docker named volumes, monitoring enabled)
-- `prod-nas` - Production (NAS/external mounts, monitoring enabled)
 - `test`     - Testing (isolated DB/Redis, runs pytest, no monitoring)
 
-**Monitoring:**
-- Enabled by default for `dev`, `prod`, and `prod-nas`
-- Pass `disable-monitoring` to run without the observability stack
-- Example: `./deploy.sh up prod disable-monitoring`
+**Flags:**
+- `--no-monitoring` - Skip the monitoring stack
+- `--nas`           - Include NAS volume overrides (prod only)
+- `--traefik`       - Include Traefik overrides for frontend + Grafana (prod only, requires traefik-proxy network)
+- `--monitoring-ports` - Publish monitoring ports to host (dev only, for local access)
+- `--monitoring-traefik` - Include Traefik routes for monitoring services (prod only)
 
 **Services (for logs):**
 - `all` - All services (default)
@@ -135,18 +158,18 @@ curl http://localhost:3000
 
 ### Prometheus Metrics
 
-The backend exposes Prometheus-compatible metrics at `/api/v1/metrics`:
+The backend exposes Prometheus-compatible metrics at `/metrics` (internal only):
 
 ```bash
-# Fetch metrics
-curl http://localhost:8000/api/v1/metrics
+# Fetch metrics (from within the Docker network)
+docker compose -f docker-compose.yml exec backend curl -s http://localhost:8000/metrics
 ```
 
 **Available metrics:**
 
 | Metric | Type | Description |
 |--------|------|-------------|
-| `http_requests_total` | counter | Total HTTP requests by method, endpoint, status code |
+| `http_requests_total` | counter | Total HTTP requests by method, endpoint |
 | `http_request_duration_seconds` | histogram | HTTP request latency (p50/p95/p99) |
 | `http_requests_in_flight` | gauge | Currently processing requests |
 | `db_pool_size` | gauge | Database connection pool size |
@@ -174,41 +197,51 @@ curl http://localhost:8000/api/v1/metrics
 | `process_start_time_seconds` | gauge | Process start time (built-in) |
 | `errors_total` | counter | Errors by type and endpoint |
 
-**Request IDs:** Every request gets a unique `request_id` (UUID) bound via `structlog.contextvars`, included in all log lines, enabling correlation between metrics and logs.
+**Request IDs:** Every request gets a unique `request_id` (UUID) bound via `structlog.contextvars`, included in all log lines, enabling correlation between metrics and logs. Query Loki with: `{service="backend"} | json | request_id="your-request-id"`
 
 ### Logs
 
 ```bash
-./deploy.sh logs [mode] [service]
+./deploy.sh logs [mode] [--no-monitoring] [service]
 ```
 
 **Examples:**
 ```bash
-./deploy.sh up prod        # Start prod mode (Docker volumes)
-./deploy.sh up prod-nas    # Start prod mode (NAS volumes)
-./deploy.sh down prod      # Stop prod mode
-./deploy.sh logs prod all  # View prod all logs
-./deploy.sh logs dev backend # View dev backend logs only
+./deploy.sh up prod                           # Start prod mode (Docker volumes)
+./deploy.sh up prod --nas                     # Start prod mode (NAS volumes)
+./deploy.sh up prod --traefik                 # Start prod with Traefik
+./deploy.sh down prod                         # Stop prod mode
+./deploy.sh logs prod all                     # View prod all logs
+./deploy.sh logs dev backend                  # View dev backend logs only
 ```
 
 ### Backups
 
 ```bash
-./backup.sh [backup_dir]    # Manual backup (keeps 7 most recent)
-crontab -e                  # Add automated backup (see crontab.example)
-./restore.sh <backup_file>  # Restore from backup
+./backup.sh [backup_dir]          # Manual backup (keeps 7 most recent)
+                                  # Backs up: PostgreSQL, Grafana dashboards/datasources,
+                                  # Alertmanager silences
+crontab -e                        # Add automated backup (see crontab.example)
+./restore.sh <backup_file>        # Restore from backup
 ```
+
+Note: Prometheus TSDB and Loki data are not backed up by default — they are regenerable
+from app metrics and Docker logs. If retention matters, back up the `prometheus-data`
+and `loki-data` volumes separately.
 
 ### Systemd Service
 
 ```bash
-./setup-service.sh          # Interactive setup for systemd service
+./setup-service.sh              # Interactive setup for systemd service
+                                # Offers monitoring stack option for prod
 ```
 
 ### Environment Validation
 
 ```bash
-./env-validator.sh          # Validate environment configuration
+./env-validator.sh              # Validate environment configuration
+                                # Requires GRAFANA_ADMIN_PASSWORD (non-default)
+                                # and ALERTMANAGER_DISCORD_WEBHOOK_URL in prod
 ```
 
 ---
@@ -219,7 +252,7 @@ crontab -e                  # Add automated backup (see crontab.example)
 
 | File                  | Purpose                         |
 |-----------------------|---------------------------------|
-| `.env`                | Primary config (auto-generated) |
+| `.env`                | Single active config (dev or prod) |
 | `.env.example`        | Template for creating `.env`    |
 | `.env.prod.example`   | Production environment template |
 | `.env.test.example`   | Test environment template       |
@@ -227,14 +260,14 @@ crontab -e                  # Add automated backup (see crontab.example)
 **How to set up:**
 
 1. **Development** - Run `./deploy.sh up dev` first; it auto-generates `.env` with interactive prompts
-2. **Production** - Copy `.env.prod.example` to `.env.prod` and fill in production values
+2. **Production** - Copy `.env.prod.example` to `.env` and fill in production values. Compose reads `.env`.
 
 ### Storage Configuration
 
 Production deployments require volume configuration for persistent data. Choose between:
 
 - **Docker volumes** (default, easy): Uses named Docker volumes (`postgresql-prod-data`, `redis-prod-data`, `instance-prod-data`)
-- **NAS mounts** (recommended for production): Mount external storage via `docker-compose.prod.nas.yml`
+- **NAS mounts** (recommended for production): Mount external storage via `--nas` flag
 
 See [Production Deployment Guide](./docs/PRODUCTION_DEPLOYMENT.md#volume-configuration) for details.
 
@@ -245,6 +278,11 @@ See [Production Deployment Guide](./docs/PRODUCTION_DEPLOYMENT.md#volume-configu
 - `ADMIN_USER_IDS` - Comma-separated osu! user IDs
 - `POSTGRESQL_PASSWORD` - PostgreSQL password
 - `POSTGRESQL_DATABASE` - Database name (default: `graveboards_prod`)
+
+**Monitoring Variables (prod required):**
+- `GRAFANA_ADMIN_PASSWORD` - Grafana admin password (must not be a default value)
+- `ALERTMANAGER_DISCORD_WEBHOOK_URL` - Discord webhook for alerts
+- `LOG_FORMAT` - `text` (dev) or `json` (prod with Loki)
 
 **Volume Variables (optional, defaults configured):**
 - `POSTGRESQL_DATA_PATH` - PostgreSQL data directory
