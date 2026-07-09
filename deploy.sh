@@ -57,7 +57,9 @@ compose() {
     local noMonitoring="${2:-false}"
     local nas="${3:-false}"
     local traefik="${4:-false}"
-    shift 4 || true
+    local monitoringPorts="${5:-false}"
+    local monitoringTraefik="${6:-false}"
+    shift 6 || true
     local compose_files=()
 
     case "$mode" in
@@ -84,6 +86,12 @@ compose() {
 
     if [[ "$mode" != "test" ]] && [[ "$noMonitoring" != "true" ]]; then
         compose_files+=("-f" "$SCRIPT_DIR/docker-compose.monitoring.yml")
+        if [[ "$mode" == "dev" ]] && [[ "$monitoringPorts" == "true" ]]; then
+            compose_files+=("-f" "$SCRIPT_DIR/docker-compose.monitoring.ports.yml")
+        fi
+        if [[ "$monitoringTraefik" == "true" ]]; then
+            compose_files+=("-f" "$SCRIPT_DIR/docker-compose.monitoring.traefik.yml")
+        fi
     fi
 
     "${COMPOSE_CMD[@]}" "${compose_files[@]}" "$@"
@@ -412,12 +420,12 @@ Graveboards Deployment Script
 Usage: ./deploy.sh [command] [args...]
 
 Commands:
-  up [mode] [--follow|-f] [--no-monitoring] [--nas] [--traefik] [service...]  - Start services (default: dev)
+  up [mode] [--follow|-f] [--no-monitoring] [--nas] [--traefik] [--monitoring-ports] [service...]  - Start services (default: dev)
   down [mode] [--no-monitoring] [--nas] [--traefik] [service...]              - Stop services (default: all)
   build [mode] [--no-monitoring] [--nas] [--traefik] [service...]             - Build images (default: dev)
   pull [repo...]                                          - Git pull repos (all or: backend, frontend, deploy)
   force-pull [repo...]                                    - Force reset repos to origin
-  deploy [mode] [--follow|-f] [--no-monitoring] [--nas] [--traefik] - Full pipeline: down + pull + build + up
+  deploy [mode] [--follow|-f] [--no-monitoring] [--nas] [--traefik] [--monitoring-ports] - Full pipeline
   logs [mode] [--no-monitoring] [--nas] [--traefik] [service] - View logs (default: dev all)
   test                                                    - Run tests
   status                                                  - Show status
@@ -433,7 +441,8 @@ Flags:
   --follow, -f            - Run in foreground (up, deploy)
   --no-monitoring         - Skip monitoring stack
   --nas                   - Include NAS volume overrides (prod only)
-  --traefik               - Include Traefik overrides (prod only, requires traefik-proxy network)
+  --traefik               - Include Traefik overrides for frontend + Grafana (prod only, requires traefik-proxy network)
+  --monitoring-ports      - Publish monitoring ports to host (dev only, for local access to Prometheus/Grafana/Loki)
 
 Services (for up, down, build, logs):
   all      - All services
@@ -445,10 +454,11 @@ Services (for up, down, build, logs):
 Examples:
   ./deploy.sh up dev                           # Start dev mode (detached + follow logs)
   ./deploy.sh up dev --follow                  # Start dev mode (foreground)
+  ./deploy.sh up dev --monitoring-ports        # Start dev with monitoring ports on host
   ./deploy.sh up dev backend                   # Start only backend in dev
-  ./deploy.sh up prod                          # Start prod (no NAS, no Traefik)
+  ./deploy.sh up prod                          # Start prod (no NAS, no Traefik, monitoring internal-only)
   ./deploy.sh up prod --nas                    # Start prod with NAS volumes
-  ./deploy.sh up prod --traefik                # Start prod with Traefik
+  ./deploy.sh up prod --traefik                # Start prod with Traefik (Grafana on grafana.graveboards.net)
   ./deploy.sh up prod --nas --traefik          # Start prod with NAS + Traefik
   ./deploy.sh down prod                        # Stop prod mode
   ./deploy.sh build test                       # Build test images
@@ -495,14 +505,18 @@ parse_mode_and_flags() {
     local -n _noMonitoring=$3
     local -n _nas=$4
     local -n _traefik=$5
-    local -n _extra=$6
-    shift 6
+    local -n _monitoringPorts=$6
+    local -n _monitoringTraefik=$7
+    local -n _extra=$8
+    shift 8
 
     _mode="dev"
     _follow="false"
     _noMonitoring="false"
     _nas="false"
     _traefik="false"
+    _monitoringPorts="false"
+    _monitoringTraefik="false"
     _extra=()
 
     while [[ $# -gt 0 ]]; do
@@ -531,6 +545,14 @@ parse_mode_and_flags() {
                 _traefik="true"
                 shift
                 ;;
+            --monitoring-ports)
+                _monitoringPorts="true"
+                shift
+                ;;
+            --monitoring-traefik)
+                _monitoringTraefik="true"
+                shift
+                ;;
             *)
                 _extra+=("$1")
                 shift
@@ -544,9 +566,9 @@ parse_mode_and_flags() {
 # =========================
 
 cmd_up() {
-    local Mode Follow NoMonitoring Nas Traefik
+    local Mode Follow NoMonitoring Nas Traefik MonitoringPorts MonitoringTraefik
     local -a ExtraServices
-    parse_mode_and_flags Mode Follow NoMonitoring Nas Traefik ExtraServices "$@"
+    parse_mode_and_flags Mode Follow NoMonitoring Nas Traefik MonitoringPorts MonitoringTraefik ExtraServices "$@"
 
     if [[ "$Traefik" == "true" ]]; then
         if ! docker network inspect traefik-proxy &>/dev/null; then
@@ -559,20 +581,20 @@ cmd_up() {
     if [[ "$Follow" == "false" ]]; then
         write_info "Starting Graveboards in $Mode mode..."
         if [[ "$Mode" != "test" ]]; then
-            compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik" up -d "${ExtraServices[@]}"
+            compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik" "$MonitoringPorts" "$MonitoringTraefik" up -d "${ExtraServices[@]}"
             write_success "Services started!"
-            compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik" logs -f "${ExtraServices[@]}"
+            compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik" "$MonitoringPorts" "$MonitoringTraefik" logs -f "${ExtraServices[@]}"
         else
-            compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik" up --profile test --build "${ExtraServices[@]}"
+            compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik" "$MonitoringPorts" "$MonitoringTraefik" up --profile test --build "${ExtraServices[@]}"
         fi
     else
         write_info "Starting Graveboards in $Mode mode (foreground)..."
         if [[ "$Mode" != "test" ]]; then
-            compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik" up --build "${ExtraServices[@]}" &
+            compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik" "$MonitoringPorts" "$MonitoringTraefik" up --build "${ExtraServices[@]}" &
             COMPOSE_PROCESS_PID=$!
             wait $COMPOSE_PROCESS_PID
         else
-            compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik" --profile test up --build "${ExtraServices[@]}" &
+            compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik" "$MonitoringPorts" "$MonitoringTraefik" --profile test up --build "${ExtraServices[@]}" &
             COMPOSE_PROCESS_PID=$!
             wait $COMPOSE_PROCESS_PID
         fi
@@ -580,31 +602,31 @@ cmd_up() {
 }
 
 cmd_down() {
-    local Mode NoMonitoring Nas Traefik
+    local Mode NoMonitoring Nas Traefik MonitoringPorts MonitoringTraefik
     local -a ExtraServices
-    parse_mode_and_flags Mode _ NoMonitoring Nas Traefik ExtraServices "$@"
+    parse_mode_and_flags Mode _ NoMonitoring Nas Traefik MonitoringPorts MonitoringTraefik ExtraServices "$@"
 
     write_info "Stopping Graveboards services..."
 
     if [[ ${#ExtraServices[@]} -gt 0 ]]; then
-        compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik" down "${ExtraServices[@]}"
+        compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik" "$MonitoringPorts" "$MonitoringTraefik" down "${ExtraServices[@]}"
     else
-        compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik" down
+        compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik" "$MonitoringPorts" "$MonitoringTraefik" down
     fi
     write_success "Services stopped!"
 }
 
 cmd_build() {
-    local Mode NoMonitoring Nas Traefik
+    local Mode NoMonitoring Nas Traefik MonitoringPorts MonitoringTraefik
     local -a ExtraServices
-    parse_mode_and_flags Mode _ NoMonitoring Nas Traefik ExtraServices "$@"
+    parse_mode_and_flags Mode _ NoMonitoring Nas Traefik MonitoringPorts MonitoringTraefik ExtraServices "$@"
 
     write_info "Building Graveboards images for $Mode mode..."
 
     if [[ ${#ExtraServices[@]} -gt 0 ]]; then
-        compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik" build "${ExtraServices[@]}"
+        compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik" "$MonitoringPorts" "$MonitoringTraefik" build "${ExtraServices[@]}"
     else
-        compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik" build
+        compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik" "$MonitoringPorts" "$MonitoringTraefik" build
     fi
 
     cleanup_spec_cache
@@ -671,9 +693,9 @@ cmd_force_pull() {
 }
 
 cmd_deploy() {
-    local Mode Follow NoMonitoring Nas Traefik
+    local Mode Follow NoMonitoring Nas Traefik MonitoringPorts MonitoringTraefik
     local -a Extra
-    parse_mode_and_flags Mode Follow NoMonitoring Nas Traefik Extra "$@"
+    parse_mode_and_flags Mode Follow NoMonitoring Nas Traefik MonitoringPorts MonitoringTraefik Extra "$@"
 
     if [[ "$Traefik" == "true" ]]; then
         if ! docker network inspect traefik-proxy &>/dev/null; then
@@ -684,7 +706,7 @@ cmd_deploy() {
     fi
 
     write_info "Stopping services..."
-    compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik" down
+    compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik" "$MonitoringPorts" "$MonitoringTraefik" down
 
     write_info "Pulling latest code..."
     if ! cmd_pull; then
@@ -693,26 +715,26 @@ cmd_deploy() {
     fi
 
     write_info "Building images..."
-    compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik" build
+    compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik" "$MonitoringPorts" "$MonitoringTraefik" build
     cleanup_spec_cache
 
     write_info "Starting services..."
     if [[ "$Follow" == "true" ]]; then
-        compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik" up --build &
+        compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik" "$MonitoringPorts" "$MonitoringTraefik" up --build &
         COMPOSE_PROCESS_PID=$!
         wait $COMPOSE_PROCESS_PID
     else
-        compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik" up -d
+        compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik" "$MonitoringPorts" "$MonitoringTraefik" up -d
         write_success "Services started!"
-        compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik" logs -f
+        compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik" "$MonitoringPorts" "$MonitoringTraefik" logs -f
     fi
 }
 
 cmd_logs() {
-    local Mode NoMonitoring Nas Traefik
+    local Mode NoMonitoring Nas Traefik MonitoringPorts MonitoringTraefik
     local Service="all"
     local -a Extra
-    parse_mode_and_flags Mode _ NoMonitoring Nas Traefik Extra "$@"
+    parse_mode_and_flags Mode _ NoMonitoring Nas Traefik MonitoringPorts MonitoringTraefik Extra "$@"
 
     if [[ ${#Extra[@]} -gt 0 ]]; then
         Service="${Extra[0]}"
@@ -720,23 +742,23 @@ cmd_logs() {
 
     case "$Service" in
         all)
-            compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik" logs -f
+            compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik" "$MonitoringPorts" "$MonitoringTraefik" logs -f
             ;;
         backend)
-            compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik" logs -f backend
+            compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik" "$MonitoringPorts" "$MonitoringTraefik" logs -f backend
             ;;
         frontend)
-            compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik" logs -f frontend
+            compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik" "$MonitoringPorts" "$MonitoringTraefik" logs -f frontend
             ;;
         postgres|postgresql)
-            compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik" logs -f postgresql
+            compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik" "$MonitoringPorts" "$MonitoringTraefik" logs -f postgresql
             ;;
         redis)
-            compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik" logs -f redis
+            compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik" "$MonitoringPorts" "$MonitoringTraefik" logs -f redis
             ;;
         *)
             write_info "Service '$Service' not found. Showing all logs..."
-            compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik" logs -f
+            compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik" "$MonitoringPorts" "$MonitoringTraefik" logs -f
             ;;
     esac
 }
