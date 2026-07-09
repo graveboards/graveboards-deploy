@@ -12,7 +12,7 @@ rule_files:
 
 scrape_configs:
     - job_name: graveboards-backend
-      metrics_path: /api/v1/metrics
+      metrics_path: /metrics
       static_configs:
           - targets:
               - graveboards-backend:8000
