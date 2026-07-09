@@ -41,8 +41,6 @@ scrape_configs:
                   request_id: request_id
           - timestamp:
               source: timestamp
-              format: '2006-01-02T15:04:05'
+              format: '2006-01-02 15:04:05'
           - labels:
               level:
-              logger:
-              request_id:
