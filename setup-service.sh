@@ -93,12 +93,12 @@ COMPOSE_FILES=("$DEPLOY_DIR/docker-compose.prod.yml")
 COMPOSE_DESC="prod"
 
 if [[ "$COMPOSE_NAS" == "true" ]]; then
-    COMPOSE_FILES+=("$DEPLOY_DIR/docker-compose.prod-nas.yml")
+    COMPOSE_FILES+=("$DEPLOY_DIR/docker-compose.prod.nas.yml")
     COMPOSE_DESC+="+nas"
 fi
 
 if [[ "$COMPOSE_TRAEFIK" == "true" ]]; then
-    COMPOSE_FILES+=("$DEPLOY_DIR/docker-compose.prod-traefik.yml")
+    COMPOSE_FILES+=("$DEPLOY_DIR/docker-compose.prod.traefik.yml")
     COMPOSE_DESC+="+traefik"
 fi
 

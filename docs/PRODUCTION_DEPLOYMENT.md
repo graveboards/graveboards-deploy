@@ -126,10 +126,10 @@ Use the NAS-specific docker-compose configuration:
 ./deploy.sh build prod
 
 # Start services with NAS volumes
-docker compose -f docker-compose.prod.yml -f docker-compose.prod-nas.yml up -d
+docker compose -f docker-compose.prod.yml -f docker-compose.prod.nas.yml up -d
 ```
 
-**Note:** The `docker-compose.prod-nas.yml` file overrides the default volume paths with your NAS configuration. It should be used in combination with `docker-compose.prod.yml` using the `-f` flag.
+**Note:** The `docker-compose.prod.nas.yml` file overrides the default volume paths with your NAS configuration. It should be used in combination with `docker-compose.prod.yml` using the `-f` flag.
 
 **Generate secure secrets:**
 
@@ -164,7 +164,7 @@ chmod +x env-validator.sh
 ./deploy.sh build prod
 
 # Start services with NAS volumes
-docker compose -f docker-compose.prod.yml -f docker-compose.prod-nas.yml up -d
+docker compose -f docker-compose.prod.yml -f docker-compose.prod.nas.yml up -d
 ```
 
 **Note:** For NAS deployments, ensure your `.env.prod` file has the `POSTGRESQL_DATA_PATH`, `REDIS_DATA_PATH`, and `INSTANCE_DATA_PATH` variables set to your NAS mount points (e.g., `/mnt/nas/graveboards/postgresql`).
@@ -174,11 +174,11 @@ docker compose -f docker-compose.prod.yml -f docker-compose.prod-nas.yml up -d
 For automatic TLS via Let's Encrypt, use the Traefik override:
 
 ```bash
-# 1. Update the domain in docker-compose.prod-traefik.yml
-vim docker-compose.prod-traefik.yml
+# 1. Update the domain in docker-compose.prod.traefik.yml
+vim docker-compose.prod.traefik.yml
 
 # 2. Start with Traefik
-docker compose -f docker-compose.prod.yml -f docker-compose.prod-traefik.yml up -d
+docker compose -f docker-compose.prod.yml -f docker-compose.prod.traefik.yml up -d
 ```
 
 The Traefik configuration provides:
@@ -225,10 +225,10 @@ curl -f http://localhost:3000
 
 ### 1. Enable HTTPS with Traefik (Recommended)
 
-Configure `docker-compose.prod-traefik.yml` with your domain:
+Configure `docker-compose.prod.traefik.yml` with your domain:
 
 ```yaml
-# In docker-compose.prod-traefik.yml, set:
+# In docker-compose.prod.traefik.yml, set:
 # traefik.http.routers.graveboards-frontend.rule=Host(`graveboards.example.com`)
 ```
 
@@ -393,10 +393,10 @@ git pull
 
 ```bash
 # Stop services
-docker compose -f docker-compose.prod.yml -f docker-compose.prod-nas.yml down
+docker compose -f docker-compose.prod.yml -f docker-compose.prod.nas.yml down
 
 # Restart with NAS
-docker compose -f docker-compose.prod.yml -f docker-compose.prod-nas.yml up -d
+docker compose -f docker-compose.prod.yml -f docker-compose.prod.nas.yml up -d
 ```
 
 ### View Service Status
@@ -513,7 +513,7 @@ backend:
 - [ ] Enabled HTTPS with Traefik (valid certificate auto-provisioned)
 - [ ] Disabled DEBUG mode
 - [ ] Disabled DISABLE_SECURITY
-- [ ] Set up Traefik with your domain in `docker-compose.prod-traefik.yml`
+- [ ] Set up Traefik with your domain in `docker-compose.prod.traefik.yml`
 - [ ] Set up automatic backups
 - [ ] Enabled health checks
 - [ ] Configured logging (json-file driver, 10m max, 3 files)

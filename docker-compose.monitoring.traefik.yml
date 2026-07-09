@@ -1,5 +1,5 @@
 # Graveboards Production - Optional Traefik Routes for Prometheus/Alertmanager
-# Usage: docker compose -f docker-compose.prod.yml -f docker-compose.prod-nas.yml -f docker-compose.prod-traefik.yml -f docker-compose.monitoring.yml -f docker-compose.monitoring.traefik.yml up
+# Usage: docker compose -f docker-compose.prod.yml -f docker-compose.prod.nas.yml -f docker-compose.prod.traefik.yml -f docker-compose.monitoring.yml -f docker-compose.monitoring.traefik.yml up
 #
 # This file adds Traefik routes with basicAuth for Prometheus and Alertmanager.
 # This is Model B exposure — off by default. Most operators only need Grafana (Model A).

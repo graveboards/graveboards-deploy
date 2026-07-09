@@ -80,10 +80,10 @@ function Invoke-Compose {
         "prod" {
             $composeFiles += "-f", "$SCRIPT_DIR\docker-compose.prod.yml"
             if ($Nas -eq "true") {
-                $composeFiles += "-f", "$SCRIPT_DIR\docker-compose.prod-nas.yml"
+                $composeFiles += "-f", "$SCRIPT_DIR\docker-compose.prod.nas.yml"
             }
             if ($Traefik -eq "true") {
-                $composeFiles += "-f", "$SCRIPT_DIR\docker-compose.prod-traefik.yml"
+                $composeFiles += "-f", "$SCRIPT_DIR\docker-compose.prod.traefik.yml"
             }
         }
         "test" {
@@ -614,8 +614,8 @@ function Cmd-Up {
             "dev" { $composeFiles += "-f", "$SCRIPT_DIR\docker-compose.yml" }
             "prod" {
                 $composeFiles += "-f", "$SCRIPT_DIR\docker-compose.prod.yml"
-                if ($nas -eq "true") { $composeFiles += "-f", "$SCRIPT_DIR\docker-compose.prod-nas.yml" }
-                if ($traefik -eq "true") { $composeFiles += "-f", "$SCRIPT_DIR\docker-compose.prod-traefik.yml" }
+                if ($nas -eq "true") { $composeFiles += "-f", "$SCRIPT_DIR\docker-compose.prod.nas.yml" }
+                if ($traefik -eq "true") { $composeFiles += "-f", "$SCRIPT_DIR\docker-compose.prod.traefik.yml" }
             }
             "test" { $composeFiles += "-f", "$SCRIPT_DIR\docker-compose.test.yml" }
         }
@@ -764,8 +764,8 @@ function Cmd-Deploy {
             "dev" { $composeFiles += "-f", "$SCRIPT_DIR\docker-compose.yml" }
             "prod" {
                 $composeFiles += "-f", "$SCRIPT_DIR\docker-compose.prod.yml"
-                if ($nas -eq "true") { $composeFiles += "-f", "$SCRIPT_DIR\docker-compose.prod-nas.yml" }
-                if ($traefik -eq "true") { $composeFiles += "-f", "$SCRIPT_DIR\docker-compose.prod-traefik.yml" }
+                if ($nas -eq "true") { $composeFiles += "-f", "$SCRIPT_DIR\docker-compose.prod.nas.yml" }
+                if ($traefik -eq "true") { $composeFiles += "-f", "$SCRIPT_DIR\docker-compose.prod.traefik.yml" }
             }
             "test" { $composeFiles += "-f", "$SCRIPT_DIR\docker-compose.test.yml" }
         }
@@ -885,7 +885,7 @@ function Cmd-Clean {
         }
 
         $composeFiles2 = @("-f", "$SCRIPT_DIR\docker-compose.prod.yml",
-                           "-f", "$SCRIPT_DIR\docker-compose.prod-traefik.yml",
+                           "-f", "$SCRIPT_DIR\docker-compose.prod.traefik.yml",
                            "-f", "$SCRIPT_DIR\docker-compose.monitoring.yml",
                            "down", "--remove-orphans")
         if ($COMPOSE_CMD.Count -gt 1) {

@@ -1,5 +1,5 @@
 # Graveboards Production Deployment - Traefik Override
-# Usage: docker compose -f docker-compose.prod.yml -f docker-compose.prod-nas.yml -f docker-compose.prod-traefik.yml up
+# Usage: docker compose -f docker-compose.prod.yml -f docker-compose.prod.nas.yml -f docker-compose.prod.traefik.yml up
 #
 # This file adds Traefik labels and network configuration for production deployment.
 # Only Grafana is publicly exposed (via Traefik subdomain with TLS + auth).

@@ -69,10 +69,10 @@ compose() {
         prod)
             compose_files=("-f" "$SCRIPT_DIR/docker-compose.prod.yml")
             if [[ "$nas" == "true" ]]; then
-                compose_files+=("-f" "$SCRIPT_DIR/docker-compose.prod-nas.yml")
+                compose_files+=("-f" "$SCRIPT_DIR/docker-compose.prod.nas.yml")
             fi
             if [[ "$traefik" == "true" ]]; then
-                compose_files+=("-f" "$SCRIPT_DIR/docker-compose.prod-traefik.yml")
+                compose_files+=("-f" "$SCRIPT_DIR/docker-compose.prod.traefik.yml")
             fi
             ;;
         test)
@@ -829,7 +829,7 @@ cmd_clean() {
                              -f "$SCRIPT_DIR/docker-compose.monitoring.yml" \
                              down -v --remove-orphans
         "${COMPOSE_CMD[@]}" -f "$SCRIPT_DIR/docker-compose.prod.yml" \
-                             -f "$SCRIPT_DIR/docker-compose.prod-traefik.yml" \
+                             -f "$SCRIPT_DIR/docker-compose.prod.traefik.yml" \
                              -f "$SCRIPT_DIR/docker-compose.monitoring.yml" \
                              down --remove-orphans
 

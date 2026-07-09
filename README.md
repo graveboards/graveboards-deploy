@@ -234,7 +234,7 @@ crontab -e                  # Add automated backup (see crontab.example)
 Production deployments require volume configuration for persistent data. Choose between:
 
 - **Docker volumes** (default, easy): Uses named Docker volumes (`postgresql-prod-data`, `redis-prod-data`, `instance-prod-data`)
-- **NAS mounts** (recommended for production): Mount external storage via `docker-compose.prod-nas.yml`
+- **NAS mounts** (recommended for production): Mount external storage via `docker-compose.prod.nas.yml`
 
 See [Production Deployment Guide](./docs/PRODUCTION_DEPLOYMENT.md#volume-configuration) for details.
 

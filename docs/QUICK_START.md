@@ -136,7 +136,7 @@ BASE_URL=https://your-domain.com
 ./deploy.sh up prod
 
 # Or with NAS volumes
-docker-compose -f docker-compose.prod.yml -f docker-compose.prod-nas.yml up -d
+docker-compose -f docker-compose.prod.yml -f docker-compose.prod.nas.yml up -d
 ```
 
 ### 6. Set Up HTTPS with Traefik (Recommended)
@@ -144,8 +144,8 @@ docker-compose -f docker-compose.prod.yml -f docker-compose.prod-nas.yml up -d
 Use the Traefik override for automatic Let's Encrypt TLS:
 
 ```bash
-# Start with Traefik (update domain in docker-compose.prod-traefik.yml)
-docker-compose -f docker-compose.prod.yml -f docker-compose.prod-traefik.yml up -d
+# Start with Traefik (update domain in docker-compose.prod.traefik.yml)
+docker-compose -f docker-compose.prod.yml -f docker-compose.prod.traefik.yml up -d
 ```
 
 The Traefik configuration includes:
@@ -258,7 +258,7 @@ cd graveboards-deploy
 
 1. Configure osu! OAuth callback URL
 2. Set up domain DNS pointing to your server
-3. Configure Traefik with your domain in `docker-compose.prod-traefik.yml`
+3. Configure Traefik with your domain in `docker-compose.prod.traefik.yml`
 4. Set up monitoring (see `monitoring/prometheus/alerts.yml`)
 5. Configure backups
 6. Review security checklist in docs/PRODUCTION_DEPLOYMENT.md

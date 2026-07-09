@@ -148,13 +148,13 @@ validate_compose_files() {
     done
 
     # Check for prod-nas override
-    if [[ -f "$deploy_dir/docker-compose.prod-nas.yml" ]]; then
-        write_success "Found: docker-compose.prod-nas.yml"
+    if [[ -f "$deploy_dir/docker-compose.prod.nas.yml" ]]; then
+        write_success "Found: docker-compose.prod.nas.yml"
     fi
 
     # Check for prod-traefik override
-    if [[ -f "$deploy_dir/docker-compose.prod-traefik.yml" ]]; then
-        write_success "Found: docker-compose.prod-traefik.yml"
+    if [[ -f "$deploy_dir/docker-compose.prod.traefik.yml" ]]; then
+        write_success "Found: docker-compose.prod.traefik.yml"
     fi
 }
 
