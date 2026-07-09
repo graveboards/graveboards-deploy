@@ -160,7 +160,6 @@ cleanup() {
         write_info "Stopping services..."
         "${COMPOSE_CMD[@]}" -f "$SCRIPT_DIR/docker-compose.yml" \
                              -f "$SCRIPT_DIR/docker-compose.prod.yml" \
-                             -f "$SCRIPT_DIR/docker-compose.test.yml" \
                              -f "$SCRIPT_DIR/docker-compose.monitoring.yml" \
                              down --remove-orphans >/dev/null 2>&1 || true
         docker network prune -f >/dev/null 2>&1 || true
@@ -825,7 +824,6 @@ cmd_clean() {
     if [[ "$confirm" == "yes" ]]; then
         write_info "Removing volumes and images..."
         "${COMPOSE_CMD[@]}" -f "$SCRIPT_DIR/docker-compose.yml" \
-                             -f "$SCRIPT_DIR/docker-compose.test.yml" \
                              -f "$SCRIPT_DIR/docker-compose.monitoring.yml" \
                              down -v --remove-orphans
         "${COMPOSE_CMD[@]}" -f "$SCRIPT_DIR/docker-compose.prod.yml" \
