@@ -64,7 +64,7 @@ groups:
                 description: "More than 50% of osu! API requests are failing."
 
           - alert: DaemonStalled
-            expr: time() - daemon_last_run_timestamp > 1800
+            expr: time() - daemon_last_job_timestamp > 1800
             for: 5m
             labels:
                 severity: warning
