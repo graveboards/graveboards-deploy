@@ -75,22 +75,6 @@
         "defaults": { "unit": "s" },
         "overrides": []
       }
-    },
-    {
-      "title": "CPU Usage by Core",
-      "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
-      "targets": [
-        {
-          "expr": "rate(process_cpu_seconds_total[5m]) * 100",
-          "legendFormat": "CPU %",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": { "unit": "percent" },
-        "overrides": []
-      }
     }
   ],
   "refresh": "30s",

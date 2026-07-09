@@ -74,7 +74,7 @@
       "targets": [
         {
           "datasource": { "type": "loki", "uid": "Loki" },
-          "expr": "sum(count_over_time({service=~\"$service\", level=\"WARNING\"}[1h]))",
+          "expr": "sum(count_over_time({service=~\"$service\", level=~\"WARN(ING)?\"}[1h]))",
           "legendFormat": "Warnings",
           "refId": "A"
         }
