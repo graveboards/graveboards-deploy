@@ -25,9 +25,9 @@ route:
 
 receivers:
     - name: discord
-      webhook_configs:
-          - url: ${ALERTMANAGER_DISCORD_WEBHOOK_URL}
-            send_resolved: true
+      discord_configs:
+          - send_resolved: true
+            webhook_url: ${ALERTMANAGER_DISCORD_WEBHOOK_URL}
 
 inhibit_rules:
     - source_match:

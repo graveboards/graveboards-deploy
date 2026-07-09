@@ -2,7 +2,7 @@ global:
     resolve_timeout: 5m
 
 route:
-    receiver: null
+    receiver: blackhole
 
 receivers:
-    - name: null
+    - name: blackhole
