@@ -80,6 +80,7 @@ echo
 
 COMPOSE_NAS=false
 COMPOSE_TRAEFIK=false
+COMPOSE_MONITORING=false
 
 if ask_confirm "  Enable prod-nas?" "y"; then
     COMPOSE_NAS=true
@@ -87,6 +88,10 @@ fi
 
 if ask_confirm "  Enable prod-traefik?" "y"; then
     COMPOSE_TRAEFIK=true
+fi
+
+if ask_confirm "  Enable monitoring stack (Prometheus, Grafana, Loki, Alertmanager)?"; then
+    COMPOSE_MONITORING=true
 fi
 
 COMPOSE_FILES=("$DEPLOY_DIR/docker-compose.prod.yml")
@@ -100,6 +105,11 @@ fi
 if [[ "$COMPOSE_TRAEFIK" == "true" ]]; then
     COMPOSE_FILES+=("$DEPLOY_DIR/docker-compose.prod.traefik.yml")
     COMPOSE_DESC+="+traefik"
+fi
+
+if [[ "$COMPOSE_MONITORING" == "true" ]]; then
+    COMPOSE_FILES+=("$DEPLOY_DIR/docker-compose.monitoring.yml")
+    COMPOSE_DESC+="+monitoring"
 fi
 
 write_success "Compose configuration: $COMPOSE_DESC"
