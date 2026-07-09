@@ -826,6 +826,8 @@ cmd_clean() {
         "${COMPOSE_CMD[@]}" -f "$SCRIPT_DIR/docker-compose.yml" \
                              -f "$SCRIPT_DIR/docker-compose.monitoring.yml" \
                              down -v --remove-orphans
+        "${COMPOSE_CMD[@]}" -f "$SCRIPT_DIR/docker-compose.test.yml" \
+                             down -v --remove-orphans
         "${COMPOSE_CMD[@]}" -f "$SCRIPT_DIR/docker-compose.prod.yml" \
                              -f "$SCRIPT_DIR/docker-compose.prod.traefik.yml" \
                              -f "$SCRIPT_DIR/docker-compose.monitoring.yml" \
