@@ -10,6 +10,60 @@ groups:
                 summary: "Graveboards backend is down"
                 description: "The Graveboards backend service has been unreachable for more than 2 minutes."
 
+          - alert: PrometheusDown
+            expr: up{job="prometheus"} == 0
+            for: 2m
+            labels:
+                severity: critical
+            annotations:
+                summary: "Prometheus is down"
+                description: "Prometheus has been unreachable for more than 2 minutes."
+
+          - alert: AlertmanagerDown
+            expr: up{job="alertmanager"} == 0
+            for: 2m
+            labels:
+                severity: critical
+            annotations:
+                summary: "Alertmanager is down"
+                description: "Alertmanager has been unreachable for more than 2 minutes."
+
+          - alert: NodeExporterDown
+            expr: up{job="node"} == 0
+            for: 2m
+            labels:
+                severity: warning
+            annotations:
+                summary: "Node exporter is down"
+                description: "Node exporter has been unreachable for more than 2 minutes."
+
+          - alert: PostgresExporterDown
+            expr: up{job="postgres"} == 0
+            for: 2m
+            labels:
+                severity: warning
+            annotations:
+                summary: "Postgres exporter is down"
+                description: "Postgres exporter has been unreachable for more than 2 minutes."
+
+          - alert: RedisExporterDown
+            expr: up{job="redis"} == 0
+            for: 2m
+            labels:
+                severity: warning
+            annotations:
+                summary: "Redis exporter is down"
+                description: "Redis exporter has been unreachable for more than 2 minutes."
+
+          - alert: LokiDown
+            expr: loki_process_up == 0
+            for: 2m
+            labels:
+                severity: critical
+            annotations:
+                summary: "Loki is down"
+                description: "Loki has been unreachable for more than 2 minutes."
+
           - alert: HighLatencyP95
             expr: histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le)) > 2
             for: 5m
@@ -42,13 +96,22 @@ groups:
                 description: "More than 90% of database connections are checked out."
 
           - alert: RedisDown
-            expr: up{job="graveboards-backend"} == 1 and absent(redis_commands_total{command="PING"})
+            expr: redis_up == 0
             for: 1m
             labels:
                 severity: critical
             annotations:
-                summary: "Redis appears to be down"
-                description: "No Redis commands have been recorded in the last 5 minutes."
+                summary: "Redis is down"
+                description: "Redis exporter reports Redis is unreachable."
+
+          - alert: PostgresDown
+            expr: pg_up == 0
+            for: 1m
+            labels:
+                severity: critical
+            annotations:
+                summary: "PostgreSQL is down"
+                description: "Postgres exporter reports PostgreSQL is unreachable."
 
           - alert: OSUAPIDown
             expr: |

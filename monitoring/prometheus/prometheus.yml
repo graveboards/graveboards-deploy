@@ -5,7 +5,7 @@ global:
 
     external_labels:
         cluster: graveboards
-        environment: ${ENV:-dev}
+        environment: dev
 
 rule_files:
     - alerts.yml
@@ -31,3 +31,13 @@ scrape_configs:
       static_configs:
           - targets:
               - node-exporter:9100
+
+    - job_name: postgres
+      static_configs:
+          - targets:
+              - postgres-exporter:9187
+
+    - job_name: redis
+      static_configs:
+          - targets:
+              - redis-exporter:9121
