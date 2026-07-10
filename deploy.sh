@@ -481,7 +481,7 @@ Commands:
   force-pull [repo...]                                    - Force reset repos to origin
   deploy [mode] [--follow|-f] [--no-monitoring] [--nas] [--traefik] [--monitoring-ports] - Full pipeline
   logs [mode] [--no-monitoring] [--nas] [--traefik] [service] - View logs (default: dev all)
-  test                                                    - Run tests
+  test [--log-file <path>] [--no-cleanup]                 - Run tests (saves output to log file by default)
   status                                                  - Show status
   clean                                                   - Remove volumes and images
   help                                                    - Show this help
@@ -819,16 +819,73 @@ cmd_logs() {
 }
 
 cmd_test() {
+    local LogFile=""
+    local NoCleanup="false"
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --log-file)
+                LogFile="$2"
+                shift 2
+                ;;
+            --log-file=*)
+                LogFile="${1#*=}"
+                shift
+                ;;
+            --no-cleanup)
+                NoCleanup="true"
+                shift
+                ;;
+            *)
+                write_error "Unknown test option: $1"
+                show_help
+                exit 1
+                ;;
+        esac
+    done
+
+    local Timestamp
+    Timestamp=$(date +%Y%m%d-%H%M%S)
+    if [[ -z "$LogFile" ]]; then
+        LogFile="$SCRIPT_DIR/test-output-${Timestamp}.log"
+    fi
+
     write_info "Running Graveboards tests in Docker..."
+    write_info "Log file: $LogFile"
 
     write_info "Building and running test services (PostgreSQL, Redis, and backend)..."
     compose test true false false false false --profile test up --build -d
 
-    write_info "Waiting for backend test container to complete..."
-    compose test true false false false false logs -f backend
+    write_info "Waiting for test services to be healthy..."
+    local retries=0
+    local max_retries=30
+    while [[ $retries -lt $max_retries ]]; do
+        if docker compose -f "$SCRIPT_DIR/docker-compose.test.yml" ps postgresql redis 2>/dev/null | grep -q "healthy"; then
+            break
+        fi
+        retries=$((retries + 1))
+        sleep 2
+    done
 
-    write_info "Test completed, cleaning up..."
-    compose test true false false false false down -v --remove-orphans
+    write_info "Running tests (output saved to $LogFile)..."
+    local exit_code=0
+    compose test true false false false false logs backend 2>&1 | tee "$LogFile" || exit_code=${PIPESTATUS[0]}
+
+    if [[ $exit_code -eq 0 ]]; then
+        write_success "Tests passed!"
+    else
+        write_error "Tests failed! Exit code: $exit_code"
+        write_error "Full log saved to: $LogFile"
+    fi
+
+    if [[ "$NoCleanup" == "true" ]]; then
+        write_warning "Skipping cleanup (--no-cleanup). Containers still running."
+    else
+        write_info "Test completed, cleaning up..."
+        compose test true false false false false down -v --remove-orphans
+    fi
+
+    return $exit_code
 }
 
 cmd_status() {
@@ -926,7 +983,7 @@ case "$Command" in
         cmd_logs "$@"
         ;;
     test)
-        cmd_test
+        cmd_test "$@"
         ;;
     status)
         cmd_status

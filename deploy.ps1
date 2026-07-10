@@ -513,7 +513,7 @@ Commands:
   force-pull [repo...]                                    - Force reset repos to origin
   deploy [mode] [--follow|-f] [--no-monitoring] [--nas] [--traefik] [--monitoring-ports] - Full pipeline: down + pull + build + up
   logs [mode] [--no-monitoring] [--nas] [--traefik] [service] - View logs (default: dev all)
-  test                                                    - Run tests
+  test [--log-file <path>] [--no-cleanup]                 - Run tests (saves output to log file by default)
   status                                                  - Show status
   clean                                                   - Remove volumes and images
   help                                                    - Show this help
@@ -887,16 +887,78 @@ function Cmd-Logs {
 }
 
 function Cmd-Test {
+    param([string[]]$InputArgs)
+
+    $Logfile = ""
+    $NoCleanup = $false
+    $i = 0
+
+    while ($i -lt $InputArgs.Count) {
+        $arg = $InputArgs[$i]
+        if ($arg -eq "--log-file") {
+            $i++
+            if ($i -lt $InputArgs.Count) {
+                $Logfile = $InputArgs[$i]
+            }
+        } elseif ($arg -match '^--log-file=(.+)$') {
+            $Logfile = $Matches[1]
+        } elseif ($arg -eq "--no-cleanup") {
+            $NoCleanup = $true
+        } elseif ($arg -eq "--help") {
+            Show-Help
+            exit 0
+        } else {
+            Write-Error "Unknown test option: $arg"
+            Show-Help
+            exit 1
+        }
+        $i++
+    }
+
+    $Timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
+    if (-not $Logfile) {
+        $Logfile = Join-Path $SCRIPT_DIR "test-output-${Timestamp}.log"
+    }
+
     Write-Info "Running Graveboards tests in Docker..."
+    Write-Info "Log file: $Logfile"
 
     Write-Info "Building and running test services (PostgreSQL, Redis, and backend)..."
     Invoke-Compose -Mode "test" -ExtraArgs @("--profile", "test", "up", "--build", "-d")
 
-    Write-Info "Waiting for backend test container to complete..."
-    Invoke-Compose -Mode "test" -ExtraArgs @("logs", "-f", "backend")
+    Write-Info "Waiting for test services to be healthy..."
+    $retries = 0
+    $maxRetries = 30
+    $healthy = $false
+    while ($retries -lt $maxRetries -and -not $healthy) {
+        $psOutput = docker compose -f "$SCRIPT_DIR\docker-compose.test.yml" ps postgresql redis 2>$null
+        if ($psOutput -match "healthy") {
+            $healthy = $true
+        }
+        $retries++
+        Start-Sleep -Seconds 2
+    }
 
-    Write-Info "Test completed, cleaning up..."
-    Invoke-Compose -Mode "test" -ExtraArgs @("down", "-v", "--remove-orphans")
+    Write-Info "Running tests (output saved to $Logfile)..."
+    $composeArgs = @("logs", "backend")
+    $null = docker compose -f "$SCRIPT_DIR\docker-compose.test.yml" @composeArgs 2>&1 | Tee-Object -FilePath $Logfile
+    $exitCode = $LASTEXITCODE
+
+    if ($exitCode -eq 0) {
+        Write-Success "Tests passed!"
+    } else {
+        Write-Error "Tests failed! Exit code: $exitCode"
+        Write-Error "Full log saved to: $Logfile"
+    }
+
+    if ($NoCleanup) {
+        Write-Warning "Skipping cleanup (--no-cleanup). Containers still running."
+    } else {
+        Write-Info "Test completed, cleaning up..."
+        Invoke-Compose -Mode "test" -ExtraArgs @("down", "-v", "--remove-orphans")
+    }
+
+    exit $exitCode
 }
 
 function Cmd-Status {
@@ -990,7 +1052,7 @@ switch ($Command) {
     "force-pull" { Cmd-ForcePull -InputArgs $Args }
     "deploy" { Cmd-Deploy -InputArgs $Args }
     "logs" { Cmd-Logs -InputArgs $Args }
-    "test" { Cmd-Test }
+    "test" { Cmd-Test -InputArgs $Args }
     "status" { Cmd-Status }
     "clean" { Cmd-Clean }
     "help" { Show-Help }
