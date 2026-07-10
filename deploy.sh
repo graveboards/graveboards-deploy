@@ -4,7 +4,7 @@
 # Usage: ./deploy.sh [command] [args...]
 #
 # Commands:
-#   up [mode] [--follow|-f] [service...]  - Start services
+#   up [mode] [--follow|-f] [--build] [service...]  - Start services
 #   down [mode] [service...]              - Stop services
 #   build [mode] [service...]             - Build images
 #   pull [repo...]                        - Git pull repositories
@@ -474,7 +474,7 @@ Graveboards Deployment Script
 Usage: ./deploy.sh [command] [args...]
 
 Commands:
-  up [mode] [--follow|-f] [--no-monitoring] [--nas] [--traefik] [--monitoring-ports] [service...]  - Start services (default: dev)
+  up [mode] [--follow|-f] [--build] [--no-monitoring] [--nas] [--traefik] [--monitoring-ports] [service...]  - Start services (default: dev)
   down [mode] [--no-monitoring] [--nas] [--traefik] [service...]              - Stop services (default: all)
   build [mode] [--no-monitoring] [--nas] [--traefik] [service...]             - Build images (default: dev)
   pull [repo...]                                          - Git pull repos (all or: backend, frontend, deploy)
@@ -492,6 +492,7 @@ Modes:
   test      - Testing mode
 
 Flags:
+  --build                 - Rebuild images before starting (up)
   --follow, -f            - Run in foreground (up, deploy)
   --no-monitoring         - Skip monitoring stack
   --nas                   - Include NAS volume overrides (prod only)
@@ -562,8 +563,9 @@ parse_mode_and_flags() {
     local -n _traefik=$5
     local -n _monitoringPorts=$6
     local -n _monitoringTraefik=$7
-    local -n _extra=$8
-    shift 8
+    local -n _build=$8
+    local -n _extra=$9
+    shift 9
 
     _mode="dev"
     _follow="false"
@@ -572,6 +574,7 @@ parse_mode_and_flags() {
     _traefik="false"
     _monitoringPorts="false"
     _monitoringTraefik="false"
+    _build="false"
     _extra=()
 
     while [[ $# -gt 0 ]]; do
@@ -608,6 +611,10 @@ parse_mode_and_flags() {
                 _monitoringTraefik="true"
                 shift
                 ;;
+            --build)
+                _build="true"
+                shift
+                ;;
             *)
                 _extra+=("$1")
                 shift
@@ -621,9 +628,9 @@ parse_mode_and_flags() {
 # =========================
 
 cmd_up() {
-    local Mode Follow NoMonitoring Nas Traefik MonitoringPorts MonitoringTraefik
+    local Mode Follow NoMonitoring Nas Traefik MonitoringPorts MonitoringTraefik Build
     local -a ExtraServices
-    parse_mode_and_flags Mode Follow NoMonitoring Nas Traefik MonitoringPorts MonitoringTraefik ExtraServices "$@"
+    parse_mode_and_flags Mode Follow NoMonitoring Nas Traefik MonitoringPorts MonitoringTraefik Build ExtraServices "$@"
 
     if [[ "$Traefik" == "true" ]]; then
         if ! docker network inspect traefik-proxy &>/dev/null; then
@@ -633,10 +640,15 @@ cmd_up() {
         fi
     fi
 
+    local BuildFlag=""
+    if [[ "$Build" == "true" ]]; then
+        BuildFlag="--build"
+    fi
+
     if [[ "$Follow" == "false" ]]; then
         write_info "Starting Graveboards in $Mode mode..."
         if [[ "$Mode" != "test" ]]; then
-            compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik" "$MonitoringPorts" "$MonitoringTraefik" up -d "${ExtraServices[@]}"
+            compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik" "$MonitoringPorts" "$MonitoringTraefik" up $BuildFlag -d "${ExtraServices[@]}"
             write_success "Services started!"
             compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik" "$MonitoringPorts" "$MonitoringTraefik" logs -f "${ExtraServices[@]}"
         else
@@ -645,7 +657,7 @@ cmd_up() {
     else
         write_info "Starting Graveboards in $Mode mode (foreground)..."
         if [[ "$Mode" != "test" ]]; then
-            compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik" "$MonitoringPorts" "$MonitoringTraefik" up --build "${ExtraServices[@]}" &
+            compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik" "$MonitoringPorts" "$MonitoringTraefik" up $BuildFlag "${ExtraServices[@]}" &
             COMPOSE_PROCESS_PID=$!
             wait $COMPOSE_PROCESS_PID
         else
@@ -659,7 +671,7 @@ cmd_up() {
 cmd_down() {
     local Mode NoMonitoring Nas Traefik MonitoringPorts MonitoringTraefik
     local -a ExtraServices
-    parse_mode_and_flags Mode _ NoMonitoring Nas Traefik MonitoringPorts MonitoringTraefik ExtraServices "$@"
+    parse_mode_and_flags Mode _ NoMonitoring Nas Traefik MonitoringPorts MonitoringTraefik _ ExtraServices "$@"
 
     write_info "Stopping Graveboards services..."
 
@@ -674,7 +686,7 @@ cmd_down() {
 cmd_build() {
     local Mode NoMonitoring Nas Traefik MonitoringPorts MonitoringTraefik
     local -a ExtraServices
-    parse_mode_and_flags Mode _ NoMonitoring Nas Traefik MonitoringPorts MonitoringTraefik ExtraServices "$@"
+    parse_mode_and_flags Mode _ NoMonitoring Nas Traefik MonitoringPorts MonitoringTraefik _ ExtraServices "$@"
 
     write_info "Building Graveboards images for $Mode mode..."
 
@@ -748,9 +760,9 @@ cmd_force_pull() {
 }
 
 cmd_deploy() {
-    local Mode Follow NoMonitoring Nas Traefik MonitoringPorts MonitoringTraefik
+    local Mode Follow NoMonitoring Nas Traefik MonitoringPorts MonitoringTraefik Build
     local -a Extra
-    parse_mode_and_flags Mode Follow NoMonitoring Nas Traefik MonitoringPorts MonitoringTraefik Extra "$@"
+    parse_mode_and_flags Mode Follow NoMonitoring Nas Traefik MonitoringPorts MonitoringTraefik Build Extra "$@"
 
     if [[ "$Traefik" == "true" ]]; then
         if ! docker network inspect traefik-proxy &>/dev/null; then
@@ -789,7 +801,7 @@ cmd_logs() {
     local Mode NoMonitoring Nas Traefik MonitoringPorts MonitoringTraefik
     local Service="all"
     local -a Extra
-    parse_mode_and_flags Mode _ NoMonitoring Nas Traefik MonitoringPorts MonitoringTraefik Extra "$@"
+    parse_mode_and_flags Mode _ NoMonitoring Nas Traefik MonitoringPorts MonitoringTraefik _ Extra "$@"
 
     if [[ ${#Extra[@]} -gt 0 ]]; then
         Service="${Extra[0]}"

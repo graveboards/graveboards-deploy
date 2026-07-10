@@ -4,7 +4,7 @@
 # Usage: .\deploy.ps1 [command] [args...]
 #
 # Commands:
-#   up [mode] [--follow|-f] [service...]  - Start services
+#   up [mode] [--follow|-f] [--build] [service...]  - Start services
 #   down [mode] [service...]              - Stop services
 #   build [mode] [service...]             - Build images
 #   pull [repo...]                        - Git pull repositories
@@ -506,7 +506,7 @@ Graveboards Deployment Script
 Usage: .\deploy.ps1 [command] [args...]
 
 Commands:
-  up [mode] [--follow|-f] [--no-monitoring] [--nas] [--traefik] [--monitoring-ports] [service...]  - Start services (default: dev)
+  up [mode] [--follow|-f] [--build] [--no-monitoring] [--nas] [--traefik] [--monitoring-ports] [service...]  - Start services (default: dev)
   down [mode] [--no-monitoring] [--nas] [--traefik] [service...]              - Stop services (default: all)
   build [mode] [--no-monitoring] [--nas] [--traefik] [service...]             - Build images (default: dev)
   pull [repo...]                                          - Git pull repos (all or: backend, frontend, deploy)
@@ -524,6 +524,7 @@ Modes:
   test      - Testing mode
 
 Flags:
+  --build                 - Rebuild images before starting (up)
   --follow, -f            - Run in foreground (up, deploy)
   --no-monitoring         - Skip monitoring stack
   --nas                   - Include NAS volume overrides (prod only)
@@ -611,6 +612,7 @@ function Parse-ModeAndFlags {
         [ref]$OutTraefik,
         [ref]$OutMonitoringPorts,
         [ref]$OutMonitoringTraefik,
+        [ref]$OutBuild,
         [ref]$OutExtra
     )
 
@@ -621,6 +623,7 @@ function Parse-ModeAndFlags {
     $OutTraefik.Value = "false"
     $OutMonitoringPorts.Value = "false"
     $OutMonitoringTraefik.Value = "false"
+    $OutBuild.Value = "false"
     $OutExtra.Value = @()
 
     foreach ($arg in $InputArgs) {
@@ -638,6 +641,8 @@ function Parse-ModeAndFlags {
             $OutMonitoringPorts.Value = "true"
         } elseif ($arg -eq "--monitoring-traefik") {
             $OutMonitoringTraefik.Value = "true"
+        } elseif ($arg -eq "--build") {
+            $OutBuild.Value = "true"
         } else {
             $OutExtra.Value += $arg
         }
@@ -651,8 +656,8 @@ function Parse-ModeAndFlags {
 function Cmd-Up {
     param([string[]]$InputArgs)
 
-    $mode = "" ; $follow = "" ; $noMonitoring = "" ; $nas = "" ; $traefik = "" ; $monitoringPorts = "" ; $monitoringTraefik = "" ; $extra = @()
-    Parse-ModeAndFlags -InputArgs $InputArgs -OutMode ([ref]$mode) -OutFollow ([ref]$follow) -OutNoMonitoring ([ref]$noMonitoring) -OutNas ([ref]$nas) -OutTraefik ([ref]$traefik) -OutMonitoringPorts ([ref]$monitoringPorts) -OutMonitoringTraefik ([ref]$monitoringTraefik) -OutExtra ([ref]$extra)
+    $mode = "" ; $follow = "" ; $noMonitoring = "" ; $nas = "" ; $traefik = "" ; $monitoringPorts = "" ; $monitoringTraefik = "" ; $build = "" ; $extra = @()
+    Parse-ModeAndFlags -InputArgs $InputArgs -OutMode ([ref]$mode) -OutFollow ([ref]$follow) -OutNoMonitoring ([ref]$noMonitoring) -OutNas ([ref]$nas) -OutTraefik ([ref]$traefik) -OutMonitoringPorts ([ref]$monitoringPorts) -OutMonitoringTraefik ([ref]$monitoringTraefik) -OutBuild ([ref]$build) -OutExtra ([ref]$extra)
 
     if ($traefik -eq "true") {
         try {
@@ -664,10 +669,15 @@ function Cmd-Up {
         }
     }
 
+    $buildArgs = @()
+    if ($build -eq "true") {
+        $buildArgs += "--build"
+    }
+
     if ($follow -eq "false") {
         Write-Info "Starting Graveboards in $mode mode..."
         if ($mode -ne "test") {
-            Invoke-Compose -Mode $mode -NoMonitoring $noMonitoring -Nas $nas -Traefik $traefik -MonitoringPorts $monitoringPorts -MonitoringTraefik $monitoringTraefik -ExtraArgs (@("up", "-d") + $extra)
+            Invoke-Compose -Mode $mode -NoMonitoring $noMonitoring -Nas $nas -Traefik $traefik -MonitoringPorts $monitoringPorts -MonitoringTraefik $monitoringTraefik -ExtraArgs (@("up") + $buildArgs + "-d" + $extra)
             Write-Success "Services started!"
             Invoke-Compose -Mode $mode -NoMonitoring $noMonitoring -Nas $nas -Traefik $traefik -MonitoringPorts $monitoringPorts -MonitoringTraefik $monitoringTraefik -ExtraArgs (@("logs", "-f") + $extra)
         } else {
@@ -696,9 +706,9 @@ function Cmd-Up {
         }
         if ($mode -ne "test") {
             if ($COMPOSE_CMD.Count -gt 1) {
-                $script:COMPOSE_PROCESS_PID = (Start-Process -FilePath $COMPOSE_CMD[0] -ArgumentList (@("compose") + $composeFiles + @("up", "--build") + $extra) -NoNewWindow -PassThru).Id
+                $script:COMPOSE_PROCESS_PID = (Start-Process -FilePath $COMPOSE_CMD[0] -ArgumentList (@("compose") + $composeFiles + @("up") + $buildArgs + $extra) -NoNewWindow -PassThru).Id
             } else {
-                $script:COMPOSE_PROCESS_PID = (Start-Process -FilePath $COMPOSE_CMD[0] -ArgumentList ($composeFiles + @("up", "--build") + $extra) -NoNewWindow -PassThru).Id
+                $script:COMPOSE_PROCESS_PID = (Start-Process -FilePath $COMPOSE_CMD[0] -ArgumentList ($composeFiles + @("up") + $buildArgs + $extra) -NoNewWindow -PassThru).Id
             }
         } else {
             $testComposeFiles = @("-f", "$SCRIPT_DIR\docker-compose.test.yml")
@@ -715,8 +725,8 @@ function Cmd-Up {
 function Cmd-Down {
     param([string[]]$InputArgs)
 
-    $mode = "" ; $noMonitoring = "" ; $nas = "" ; $traefik = "" ; $monitoringPorts = "" ; $monitoringTraefik = "" ; $extra = @()
-    Parse-ModeAndFlags -InputArgs $InputArgs -OutMode ([ref]$mode) -OutNoMonitoring ([ref]$noMonitoring) -OutNas ([ref]$nas) -OutTraefik ([ref]$traefik) -OutMonitoringPorts ([ref]$monitoringPorts) -OutMonitoringTraefik ([ref]$monitoringTraefik) -OutExtra ([ref]$extra)
+    $mode = "" ; $noMonitoring = "" ; $nas = "" ; $traefik = "" ; $monitoringPorts = "" ; $monitoringTraefik = "" ; $build = "" ; $extra = @()
+    Parse-ModeAndFlags -InputArgs $InputArgs -OutMode ([ref]$mode) -OutNoMonitoring ([ref]$noMonitoring) -OutNas ([ref]$nas) -OutTraefik ([ref]$traefik) -OutMonitoringPorts ([ref]$monitoringPorts) -OutMonitoringTraefik ([ref]$monitoringTraefik) -OutBuild ([ref]$build) -OutExtra ([ref]$extra)
 
     Write-Info "Stopping Graveboards services..."
 
@@ -731,8 +741,8 @@ function Cmd-Down {
 function Cmd-Build {
     param([string[]]$InputArgs)
 
-    $mode = "" ; $noMonitoring = "" ; $nas = "" ; $traefik = "" ; $monitoringPorts = "" ; $monitoringTraefik = "" ; $extra = @()
-    Parse-ModeAndFlags -InputArgs $InputArgs -OutMode ([ref]$mode) -OutNoMonitoring ([ref]$noMonitoring) -OutNas ([ref]$nas) -OutTraefik ([ref]$traefik) -OutMonitoringPorts ([ref]$monitoringPorts) -OutMonitoringTraefik ([ref]$monitoringTraefik) -OutExtra ([ref]$extra)
+    $mode = "" ; $noMonitoring = "" ; $nas = "" ; $traefik = "" ; $monitoringPorts = "" ; $monitoringTraefik = "" ; $build = "" ; $extra = @()
+    Parse-ModeAndFlags -InputArgs $InputArgs -OutMode ([ref]$mode) -OutNoMonitoring ([ref]$noMonitoring) -OutNas ([ref]$nas) -OutTraefik ([ref]$traefik) -OutMonitoringPorts ([ref]$monitoringPorts) -OutMonitoringTraefik ([ref]$monitoringTraefik) -OutBuild ([ref]$build) -OutExtra ([ref]$extra)
 
     Write-Info "Building Graveboards images for $mode mode..."
 
@@ -800,8 +810,8 @@ function Cmd-ForcePull {
 function Cmd-Deploy {
     param([string[]]$InputArgs)
 
-    $mode = "" ; $follow = "" ; $noMonitoring = "" ; $nas = "" ; $traefik = "" ; $monitoringPorts = "" ; $monitoringTraefik = "" ; $extra = @()
-    Parse-ModeAndFlags -InputArgs $InputArgs -OutMode ([ref]$mode) -OutFollow ([ref]$follow) -OutNoMonitoring ([ref]$noMonitoring) -OutNas ([ref]$nas) -OutTraefik ([ref]$traefik) -OutMonitoringPorts ([ref]$monitoringPorts) -OutMonitoringTraefik ([ref]$monitoringTraefik) -OutExtra ([ref]$extra)
+    $mode = "" ; $follow = "" ; $noMonitoring = "" ; $nas = "" ; $traefik = "" ; $monitoringPorts = "" ; $monitoringTraefik = "" ; $build = "" ; $extra = @()
+    Parse-ModeAndFlags -InputArgs $InputArgs -OutMode ([ref]$mode) -OutFollow ([ref]$follow) -OutNoMonitoring ([ref]$noMonitoring) -OutNas ([ref]$nas) -OutTraefik ([ref]$traefik) -OutMonitoringPorts ([ref]$monitoringPorts) -OutMonitoringTraefik ([ref]$monitoringTraefik) -OutBuild ([ref]$build) -OutExtra ([ref]$extra)
 
     if ($traefik -eq "true") {
         try {
@@ -864,8 +874,8 @@ function Cmd-Deploy {
 function Cmd-Logs {
     param([string[]]$InputArgs)
 
-    $mode = "" ; $noMonitoring = "" ; $nas = "" ; $traefik = "" ; $monitoringPorts = "" ; $monitoringTraefik = "" ; $extra = @()
-    Parse-ModeAndFlags -InputArgs $InputArgs -OutMode ([ref]$mode) -OutNoMonitoring ([ref]$noMonitoring) -OutNas ([ref]$nas) -OutTraefik ([ref]$traefik) -OutMonitoringPorts ([ref]$monitoringPorts) -OutMonitoringTraefik ([ref]$monitoringTraefik) -OutExtra ([ref]$extra)
+    $mode = "" ; $noMonitoring = "" ; $nas = "" ; $traefik = "" ; $monitoringPorts = "" ; $monitoringTraefik = "" ; $build = "" ; $extra = @()
+    Parse-ModeAndFlags -InputArgs $InputArgs -OutMode ([ref]$mode) -OutNoMonitoring ([ref]$noMonitoring) -OutNas ([ref]$nas) -OutTraefik ([ref]$traefik) -OutMonitoringPorts ([ref]$monitoringPorts) -OutMonitoringTraefik ([ref]$monitoringTraefik) -OutBuild ([ref]$build) -OutExtra ([ref]$extra)
 
     $service = "all"
     if ($extra.Count -gt 0) {
