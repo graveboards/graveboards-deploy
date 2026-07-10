@@ -481,7 +481,7 @@ Commands:
   force-pull [repo...]                                    - Force reset repos to origin
   deploy [mode] [--follow|-f] [--no-monitoring] [--nas] [--traefik] [--monitoring-ports] - Full pipeline
   logs [mode] [--no-monitoring] [--nas] [--traefik] [service] - View logs (default: dev all)
-  test [--log-file <path>] [--no-cleanup]                 - Run tests (saves output to log file by default)
+  test [--log-file <path>] [--no-cleanup] [--no-log]      - Run tests (saves output to log file by default)
   status                                                  - Show status
   clean                                                   - Remove volumes and images
   help                                                    - Show this help
@@ -821,6 +821,7 @@ cmd_logs() {
 cmd_test() {
     local LogFile=""
     local NoCleanup="false"
+    local NoLogFile="false"
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -836,6 +837,10 @@ cmd_test() {
                 NoCleanup="true"
                 shift
                 ;;
+            --no-log)
+                NoLogFile="true"
+                shift
+                ;;
             *)
                 write_error "Unknown test option: $1"
                 show_help
@@ -846,12 +851,16 @@ cmd_test() {
 
     local Timestamp
     Timestamp=$(date +%Y%m%d-%H%M%S)
-    if [[ -z "$LogFile" ]]; then
+    if [[ -z "$LogFile" ]] && [[ "$NoLogFile" != "true" ]]; then
         LogFile="$SCRIPT_DIR/test-output-${Timestamp}.log"
     fi
 
     write_info "Running Graveboards tests in Docker..."
-    write_info "Log file: $LogFile"
+    if [[ -n "$LogFile" ]]; then
+        write_info "Log file: $LogFile"
+    else
+        write_info "Log file: disabled (--no-log)"
+    fi
 
     write_info "Building and running test services (PostgreSQL, Redis, and backend)..."
     compose test true false false false false --profile test up --build -d
@@ -867,15 +876,22 @@ cmd_test() {
         sleep 2
     done
 
-    write_info "Running tests (output saved to $LogFile)..."
     local exit_code=0
-    compose test true false false false false logs backend 2>&1 | tee "$LogFile" || exit_code=${PIPESTATUS[0]}
+    if [[ -n "$LogFile" ]]; then
+        write_info "Running tests (output saved to $LogFile)..."
+        compose test true false false false false logs backend 2>&1 | tee "$LogFile" || exit_code=${PIPESTATUS[0]}
+    else
+        write_info "Running tests (terminal output only)..."
+        compose test true false false false false logs backend 2>&1 || exit_code=$?
+    fi
 
     if [[ $exit_code -eq 0 ]]; then
         write_success "Tests passed!"
     else
         write_error "Tests failed! Exit code: $exit_code"
-        write_error "Full log saved to: $LogFile"
+        if [[ -n "$LogFile" ]]; then
+            write_error "Full log saved to: $LogFile"
+        fi
     fi
 
     if [[ "$NoCleanup" == "true" ]]; then

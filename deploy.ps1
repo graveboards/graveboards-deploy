@@ -513,7 +513,7 @@ Commands:
   force-pull [repo...]                                    - Force reset repos to origin
   deploy [mode] [--follow|-f] [--no-monitoring] [--nas] [--traefik] [--monitoring-ports] - Full pipeline: down + pull + build + up
   logs [mode] [--no-monitoring] [--nas] [--traefik] [service] - View logs (default: dev all)
-  test [--log-file <path>] [--no-cleanup]                 - Run tests (saves output to log file by default)
+  test [--log-file <path>] [--no-cleanup] [--no-log]      - Run tests (saves output to log file by default)
   status                                                  - Show status
   clean                                                   - Remove volumes and images
   help                                                    - Show this help
@@ -891,6 +891,7 @@ function Cmd-Test {
 
     $Logfile = ""
     $NoCleanup = $false
+    $NoLogFile = $false
     $i = 0
 
     while ($i -lt $InputArgs.Count) {
@@ -904,6 +905,8 @@ function Cmd-Test {
             $Logfile = $Matches[1]
         } elseif ($arg -eq "--no-cleanup") {
             $NoCleanup = $true
+        } elseif ($arg -eq "--no-log") {
+            $NoLogFile = $true
         } elseif ($arg -eq "--help") {
             Show-Help
             exit 0
@@ -916,12 +919,16 @@ function Cmd-Test {
     }
 
     $Timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
-    if (-not $Logfile) {
+    if (-not $Logfile -and -not $NoLogFile) {
         $Logfile = Join-Path $SCRIPT_DIR "test-output-${Timestamp}.log"
     }
 
     Write-Info "Running Graveboards tests in Docker..."
-    Write-Info "Log file: $Logfile"
+    if ($Logfile) {
+        Write-Info "Log file: $Logfile"
+    } else {
+        Write-Info "Log file: disabled (--no-log)"
+    }
 
     Write-Info "Building and running test services (PostgreSQL, Redis, and backend)..."
     Invoke-Compose -Mode "test" -ExtraArgs @("--profile", "test", "up", "--build", "-d")
@@ -939,16 +946,26 @@ function Cmd-Test {
         Start-Sleep -Seconds 2
     }
 
-    Write-Info "Running tests (output saved to $Logfile)..."
-    $composeArgs = @("logs", "backend")
-    $null = docker compose -f "$SCRIPT_DIR\docker-compose.test.yml" @composeArgs 2>&1 | Tee-Object -FilePath $Logfile
-    $exitCode = $LASTEXITCODE
+    $exitCode = 0
+    if ($Logfile) {
+        Write-Info "Running tests (output saved to $Logfile)..."
+        $composeArgs = @("logs", "backend")
+        $null = docker compose -f "$SCRIPT_DIR\docker-compose.test.yml" @composeArgs 2>&1 | Tee-Object -FilePath $Logfile
+        $exitCode = $LASTEXITCODE
+    } else {
+        Write-Info "Running tests (terminal output only)..."
+        $composeArgs = @("logs", "backend")
+        $null = docker compose -f "$SCRIPT_DIR\docker-compose.test.yml" @composeArgs 2>&1
+        $exitCode = $LASTEXITCODE
+    }
 
     if ($exitCode -eq 0) {
         Write-Success "Tests passed!"
     } else {
         Write-Error "Tests failed! Exit code: $exitCode"
-        Write-Error "Full log saved to: $Logfile"
+        if ($Logfile) {
+            Write-Error "Full log saved to: $Logfile"
+        }
     }
 
     if ($NoCleanup) {
