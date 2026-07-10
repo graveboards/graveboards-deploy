@@ -513,7 +513,7 @@ Commands:
   force-pull [repo...]                                    - Force reset repos to origin
   deploy [mode] [--follow|-f] [--no-monitoring] [--nas] [--traefik] [--monitoring-ports] - Full pipeline: down + pull + build + up
   logs [mode] [--no-monitoring] [--nas] [--traefik] [service] - View logs (default: dev all)
-  test [--log-file <path>] [--no-cleanup] [--no-log]      - Run tests (saves output to log file by default)
+  test [--log-file <path>] [--no-cleanup] [--no-log] [--quiet] - Run tests (saves output to log file by default)
   status                                                  - Show status
   clean                                                   - Remove volumes and images
   help                                                    - Show this help
@@ -892,6 +892,7 @@ function Cmd-Test {
     $Logfile = ""
     $NoCleanup = $false
     $NoLogFile = $false
+    $Quiet = $false
     $i = 0
 
     while ($i -lt $InputArgs.Count) {
@@ -907,6 +908,8 @@ function Cmd-Test {
             $NoCleanup = $true
         } elseif ($arg -eq "--no-log") {
             $NoLogFile = $true
+        } elseif ($arg -eq "--quiet") {
+            $Quiet = $true
         } elseif ($arg -eq "--help") {
             Show-Help
             exit 0
@@ -930,8 +933,16 @@ function Cmd-Test {
         Write-Info "Log file: disabled (--no-log)"
     }
 
-    Write-Info "Building and running test services (PostgreSQL, Redis, and backend)..."
-    Invoke-Compose -Mode "test" -ExtraArgs @("--profile", "test", "up", "--build", "--quiet-pull", "-d")
+    if ($Quiet) {
+        Write-Info "Building test image (quiet)..."
+        docker compose -f "$SCRIPT_DIR\docker-compose.test.yml" --profile test build --quiet 2>$null
+    } else {
+        Write-Info "Building test image..."
+        docker compose -f "$SCRIPT_DIR\docker-compose.test.yml" --profile test build
+    }
+
+    Write-Info "Starting test services (PostgreSQL, Redis, and backend)..."
+    Invoke-Compose -Mode "test" -ExtraArgs @("--profile", "test", "up", "-d")
 
     Write-Info "Waiting for test services to be healthy..."
     $healthRetries = 0
