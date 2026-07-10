@@ -866,22 +866,48 @@ cmd_test() {
     compose test true false false false false --profile test up --build -d
 
     write_info "Waiting for test services to be healthy..."
-    local retries=0
-    local max_retries=30
-    while [[ $retries -lt $max_retries ]]; do
+    local health_retries=0
+    local max_health_retries=30
+    while [[ $health_retries -lt $max_health_retries ]]; do
         if docker compose -f "$SCRIPT_DIR/docker-compose.test.yml" ps postgresql redis 2>/dev/null | grep -q "healthy"; then
             break
         fi
-        retries=$((retries + 1))
+        health_retries=$((health_retries + 1))
         sleep 2
     done
 
+    if [[ $health_retries -eq $max_health_retries ]]; then
+        write_error "Test services did not become healthy in time"
+        compose test true false false false false logs backend 2>&1
+        if [[ "$NoCleanup" != "true" ]]; then
+            compose test true false false false false down -v --remove-orphans
+        fi
+        exit 1
+    fi
+
+    write_info "Waiting for backend test container to complete..."
+    local wait_retries=0
+    local max_wait_retries=180
+    while [[ $wait_retries -lt $max_wait_retries ]]; do
+        local container_status
+        container_status=$(docker compose -f "$SCRIPT_DIR/docker-compose.test.yml" ps backend 2>/dev/null | awk 'NR>1 {print $2}')
+        if [[ "$container_status" == "Exited" ]] || [[ "$container_status" == "dead" ]] || [[ -z "$container_status" ]]; then
+            break
+        fi
+        wait_retries=$((wait_retries + 1))
+        sleep 2
+    done
+
+    if [[ $wait_retries -eq $max_wait_retries ]]; then
+        write_warning "Backend container did not complete within timeout"
+    fi
+
     local exit_code=0
     if [[ -n "$LogFile" ]]; then
-        write_info "Running tests (output saved to $LogFile)..."
+        write_info "Capturing test output to $LogFile..."
         compose test true false false false false logs backend 2>&1 | tee "$LogFile" || exit_code=${PIPESTATUS[0]}
     else
-        write_info "Running tests (terminal output only)..."
+        write_info "Showing test output..."
         compose test true false false false false logs backend 2>&1 || exit_code=$?
     fi
 

@@ -934,26 +934,52 @@ function Cmd-Test {
     Invoke-Compose -Mode "test" -ExtraArgs @("--profile", "test", "up", "--build", "-d")
 
     Write-Info "Waiting for test services to be healthy..."
-    $retries = 0
-    $maxRetries = 30
+    $healthRetries = 0
+    $maxHealthRetries = 30
     $healthy = $false
-    while ($retries -lt $maxRetries -and -not $healthy) {
+    while ($healthRetries -lt $maxHealthRetries -and -not $healthy) {
         $psOutput = docker compose -f "$SCRIPT_DIR\docker-compose.test.yml" ps postgresql redis 2>$null
         if ($psOutput -match "healthy") {
             $healthy = $true
         }
-        $retries++
+        $healthRetries++
         Start-Sleep -Seconds 2
+    }
+
+    if (-not $healthy) {
+        Write-Error "Test services did not become healthy in time"
+        docker compose -f "$SCRIPT_DIR\docker-compose.test.yml" logs backend 2>&1
+        if (-not $NoCleanup) {
+            Invoke-Compose -Mode "test" -ExtraArgs @("down", "-v", "--remove-orphans")
+        }
+        exit 1
+    }
+
+    Write-Info "Waiting for backend test container to complete..."
+    $waitRetries = 0
+    $maxWaitRetries = 180
+    while ($waitRetries -lt $maxWaitRetries) {
+        $psOutput = docker compose -f "$SCRIPT_DIR\docker-compose.test.yml" ps backend 2>$null
+        $containerStatus = ($psOutput | Select-Object -Skip 1) -join " "
+        if ($containerStatus -match "Exited|dead" -or -not $containerStatus) {
+            break
+        }
+        $waitRetries++
+        Start-Sleep -Seconds 2
+    }
+
+    if ($waitRetries -eq $maxWaitRetries) {
+        Write-Warning "Backend container did not complete within timeout"
     }
 
     $exitCode = 0
     if ($Logfile) {
-        Write-Info "Running tests (output saved to $Logfile)..."
+        Write-Info "Capturing test output to $Logfile..."
         $composeArgs = @("logs", "backend")
         $null = docker compose -f "$SCRIPT_DIR\docker-compose.test.yml" @composeArgs 2>&1 | Tee-Object -FilePath $Logfile
         $exitCode = $LASTEXITCODE
     } else {
-        Write-Info "Running tests (terminal output only)..."
+        Write-Info "Showing test output..."
         $composeArgs = @("logs", "backend")
         $null = docker compose -f "$SCRIPT_DIR\docker-compose.test.yml" @composeArgs 2>&1
         $exitCode = $LASTEXITCODE
