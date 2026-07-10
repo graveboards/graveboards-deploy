@@ -1,0 +1,29 @@
+groups:
+    - name: graveboards-recording-rules
+      rules:
+          - record: job:http_requests:rate5m
+            expr: sum(rate(http_requests_total[5m]))
+
+          - record: job:http_requests_errors:ratio5m
+            expr: >
+                sum(rate(http_requests_total{status_code=~"5.."}[5m]))
+                /
+                sum(rate(http_requests_total[5m]))
+
+          - record: job:http_request_duration:p95_5m
+            expr: histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))
+
+          - record: instance:node_cpu_utilization:ratio5m
+            expr: 1 - avg(rate(node_cpu_seconds_total{mode="idle"}[5m]))
+
+          - record: job:redis_cache:hit_ratio5m
+            expr: >
+                sum(rate(redis_cache_hits_total[5m]))
+                /
+                (sum(rate(redis_cache_hits_total[5m])) + sum(rate(redis_cache_misses_total[5m])))
+
+          - record: job:pg_cache:hit_ratio5m
+            expr: >
+                sum(rate(pg_stat_database_blks_hit[5m]))
+                /
+                (sum(rate(pg_stat_database_blks_hit[5m])) + sum(rate(pg_stat_database_blks_read[5m])))
