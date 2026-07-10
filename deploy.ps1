@@ -671,7 +671,7 @@ function Cmd-Up {
             Write-Success "Services started!"
             Invoke-Compose -Mode $mode -NoMonitoring $noMonitoring -Nas $nas -Traefik $traefik -MonitoringPorts $monitoringPorts -MonitoringTraefik $monitoringTraefik -ExtraArgs (@("logs", "-f") + $extra)
         } else {
-            Invoke-Compose -Mode $mode -NoMonitoring $noMonitoring -Nas $nas -Traefik $traefik -MonitoringPorts $monitoringPorts -MonitoringTraefik $monitoringTraefik -ExtraArgs (@("up", "--profile", "test", "--build") + $extra)
+            Invoke-Compose -Mode $mode -NoMonitoring $noMonitoring -Nas $nas -Traefik $traefik -MonitoringPorts $monitoringPorts -MonitoringTraefik $monitoringTraefik -ExtraArgs (@("--profile", "test", "up", "--build") + $extra)
         }
     } else {
         Write-Info "Starting Graveboards in $mode mode (foreground)..."

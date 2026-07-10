@@ -640,7 +640,7 @@ cmd_up() {
             write_success "Services started!"
             compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik" "$MonitoringPorts" "$MonitoringTraefik" logs -f "${ExtraServices[@]}"
         else
-            compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik" "$MonitoringPorts" "$MonitoringTraefik" up --profile test --build "${ExtraServices[@]}"
+            compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik" "$MonitoringPorts" "$MonitoringTraefik" --profile test up --build "${ExtraServices[@]}"
         fi
     else
         write_info "Starting Graveboards in $Mode mode (foreground)..."
@@ -822,13 +822,13 @@ cmd_test() {
     write_info "Running Graveboards tests in Docker..."
 
     write_info "Building and running test services (PostgreSQL, Redis, and backend)..."
-    compose test --profile test up --build -d
+    compose test true false false false false --profile test up --build -d
 
     write_info "Waiting for backend test container to complete..."
-    compose test logs -f backend
+    compose test true false false false false logs -f backend
 
     write_info "Test completed, cleaning up..."
-    compose test down -v --remove-orphans
+    compose test true false false false false down -v --remove-orphans
 }
 
 cmd_status() {
