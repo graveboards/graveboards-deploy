@@ -942,7 +942,7 @@ function Cmd-Test {
     }
 
     Write-Info "Starting test services (PostgreSQL, Redis, and backend)..."
-    Invoke-Compose -Mode "test" -ExtraArgs @("--profile", "test", "up", "-d")
+    Invoke-Compose -Mode "test" -ExtraArgs @("--profile", "test", "up", "-d", "--quiet-pull")
 
     Write-Info "Waiting for test services to be healthy..."
     $healthRetries = 0
@@ -968,7 +968,7 @@ function Cmd-Test {
 
     $exitCode = 0
     if ($Logfile) {
-        Write-Info "Running tests (real-time output to terminal and $Logfile)..."
+        Write-Info "Running tests (real-time output to terminal and $(Split-Path $Logfile -Leaf))..."
         $composeArgs = @("logs", "-f", "backend")
         $null = docker compose -f "$SCRIPT_DIR\docker-compose.test.yml" @composeArgs 2>&1 | Tee-Object -FilePath $Logfile
         $exitCode = $LASTEXITCODE
@@ -977,6 +977,18 @@ function Cmd-Test {
         $composeArgs = @("logs", "-f", "backend")
         $null = docker compose -f "$SCRIPT_DIR\docker-compose.test.yml" @composeArgs 2>&1
         $exitCode = $LASTEXITCODE
+    }
+
+    if ($exitCode -ne 0) {
+        Write-Error "Unexpected non-zero exit code: $exitCode (logs may have been truncated)"
+    }
+
+    $backendContainerId = docker compose -f "$SCRIPT_DIR\docker-compose.test.yml" ps -q backend 2>$null | Select-Object -First 1
+    if ($backendContainerId) {
+        $containerExitCode = docker inspect --format '{{.State.ExitCode}}' $backendContainerId 2>$null
+        if ($containerExitCode -and $containerExitCode -ne 0) {
+            $exitCode = $containerExitCode
+        }
     }
 
     if ($exitCode -eq 0) {

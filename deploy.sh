@@ -869,7 +869,7 @@ cmd_test() {
     compose test true false false false false --profile test build --quiet 2>/dev/null || true
 
     write_info "Starting test services (PostgreSQL, Redis, and backend)..."
-    compose test true false false false false --profile test up -d
+    compose test true false false false false --profile test up -d --quiet-pull 2>/dev/null
 
     write_info "Waiting for test services to be healthy..."
     local health_retries=0
@@ -892,8 +892,9 @@ cmd_test() {
     fi
 
     local exit_code=0
+    set +e
     if [[ -n "$LogFile" ]]; then
-        write_info "Running tests (real-time output to terminal and $LogFile)..."
+        write_info "Running tests (real-time output to terminal and ${LogFile##*/})..."
         set +o pipefail
         compose test true false false false false logs -f backend 2>&1 | tee "$LogFile"
         exit_code=${PIPESTATUS[0]}
@@ -902,6 +903,17 @@ cmd_test() {
         write_info "Running tests (real-time output to terminal)..."
         compose test true false false false false logs -f backend 2>&1
         exit_code=$?
+    fi
+    set -e
+
+    if [[ $exit_code -ne 0 ]]; then
+        write_error "Unexpected non-zero exit code: $exit_code (logs may have been truncated)"
+    fi
+
+    local container_exit_code
+    container_exit_code=$(docker compose -f "$SCRIPT_DIR/docker-compose.test.yml" ps -q backend 2>/dev/null | xargs -I{} docker inspect --format '{{.State.ExitCode}}' {} 2>/dev/null)
+    if [[ -n "$container_exit_code" ]] && [[ "$container_exit_code" -ne 0 ]]; then
+        exit_code=$container_exit_code
     fi
 
     if [[ $exit_code -eq 0 ]]; then
