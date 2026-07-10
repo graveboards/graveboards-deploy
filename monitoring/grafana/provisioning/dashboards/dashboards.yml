@@ -3,10 +3,10 @@ apiVersion: 1
 providers:
     - name: "Graveboards"
       orgId: 1
-      folder: "Graveboards"
+      folder: ""
       type: file
       disableDeletion: false
       editable: true
       options:
           path: /var/lib/grafana/dashboards
-          foldersFromFilesStructure: false
+          foldersFromFilesStructure: true
