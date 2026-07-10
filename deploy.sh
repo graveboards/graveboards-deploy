@@ -863,7 +863,7 @@ cmd_test() {
     fi
 
     write_info "Building and running test services (PostgreSQL, Redis, and backend)..."
-    compose test true false false false false --profile test up --build -d
+    compose test true false false false false --profile test up --build --quiet-pull -d
 
     write_info "Waiting for test services to be healthy..."
     local health_retries=0
@@ -885,30 +885,13 @@ cmd_test() {
         exit 1
     fi
 
-    write_info "Waiting for backend test container to complete..."
-    local wait_retries=0
-    local max_wait_retries=180
-    while [[ $wait_retries -lt $max_wait_retries ]]; do
-        local container_status
-        container_status=$(docker compose -f "$SCRIPT_DIR/docker-compose.test.yml" ps backend 2>/dev/null | awk 'NR>1 {print $2}')
-        if [[ "$container_status" == "Exited" ]] || [[ "$container_status" == "dead" ]] || [[ -z "$container_status" ]]; then
-            break
-        fi
-        wait_retries=$((wait_retries + 1))
-        sleep 2
-    done
-
-    if [[ $wait_retries -eq $max_wait_retries ]]; then
-        write_warning "Backend container did not complete within timeout"
-    fi
-
     local exit_code=0
     if [[ -n "$LogFile" ]]; then
-        write_info "Capturing test output to $LogFile..."
-        compose test true false false false false logs backend 2>&1 | tee "$LogFile" || exit_code=${PIPESTATUS[0]}
+        write_info "Running tests (real-time output to terminal and $LogFile)..."
+        compose test true false false false false logs -f backend 2>&1 | tee "$LogFile" || exit_code=${PIPESTATUS[0]}
     else
-        write_info "Showing test output..."
-        compose test true false false false false logs backend 2>&1 || exit_code=$?
+        write_info "Running tests (real-time output to terminal)..."
+        compose test true false false false false logs -f backend 2>&1 || exit_code=$?
     fi
 
     if [[ $exit_code -eq 0 ]]; then

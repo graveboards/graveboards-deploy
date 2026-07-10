@@ -931,7 +931,7 @@ function Cmd-Test {
     }
 
     Write-Info "Building and running test services (PostgreSQL, Redis, and backend)..."
-    Invoke-Compose -Mode "test" -ExtraArgs @("--profile", "test", "up", "--build", "-d")
+    Invoke-Compose -Mode "test" -ExtraArgs @("--profile", "test", "up", "--build", "--quiet-pull", "-d")
 
     Write-Info "Waiting for test services to be healthy..."
     $healthRetries = 0
@@ -955,32 +955,15 @@ function Cmd-Test {
         exit 1
     }
 
-    Write-Info "Waiting for backend test container to complete..."
-    $waitRetries = 0
-    $maxWaitRetries = 180
-    while ($waitRetries -lt $maxWaitRetries) {
-        $psOutput = docker compose -f "$SCRIPT_DIR\docker-compose.test.yml" ps backend 2>$null
-        $containerStatus = ($psOutput | Select-Object -Skip 1) -join " "
-        if ($containerStatus -match "Exited|dead" -or -not $containerStatus) {
-            break
-        }
-        $waitRetries++
-        Start-Sleep -Seconds 2
-    }
-
-    if ($waitRetries -eq $maxWaitRetries) {
-        Write-Warning "Backend container did not complete within timeout"
-    }
-
     $exitCode = 0
     if ($Logfile) {
-        Write-Info "Capturing test output to $Logfile..."
-        $composeArgs = @("logs", "backend")
+        Write-Info "Running tests (real-time output to terminal and $Logfile)..."
+        $composeArgs = @("logs", "-f", "backend")
         $null = docker compose -f "$SCRIPT_DIR\docker-compose.test.yml" @composeArgs 2>&1 | Tee-Object -FilePath $Logfile
         $exitCode = $LASTEXITCODE
     } else {
-        Write-Info "Showing test output..."
-        $composeArgs = @("logs", "backend")
+        Write-Info "Running tests (real-time output to terminal)..."
+        $composeArgs = @("logs", "-f", "backend")
         $null = docker compose -f "$SCRIPT_DIR\docker-compose.test.yml" @composeArgs 2>&1
         $exitCode = $LASTEXITCODE
     }
