@@ -894,10 +894,14 @@ cmd_test() {
     local exit_code=0
     if [[ -n "$LogFile" ]]; then
         write_info "Running tests (real-time output to terminal and $LogFile)..."
-        compose test true false false false false logs -f backend 2>&1 | tee "$LogFile" || exit_code=${PIPESTATUS[0]}
+        set +o pipefail
+        compose test true false false false false logs -f backend 2>&1 | tee "$LogFile"
+        exit_code=${PIPESTATUS[0]}
+        set -o pipefail
     else
         write_info "Running tests (real-time output to terminal)..."
-        compose test true false false false false logs -f backend 2>&1 || exit_code=$?
+        compose test true false false false false logs -f backend 2>&1
+        exit_code=$?
     fi
 
     if [[ $exit_code -eq 0 ]]; then
@@ -1031,5 +1035,3 @@ case "$Command" in
         exit 1
         ;;
 esac
-
-exit 0
