@@ -474,7 +474,24 @@
             "displayMode": "auto",
             "inspect": false
           }
-        }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "endpoint" },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "View logs for this endpoint",
+                    "url": "/d/graveboards-logs?var-service=backend&var-logger=app.access&var-search=${__value.text}&from=${__from}&to=${__to}",
+                    "targetBlank": false
+                  }
+                ]
+              }
+            ]
+          }
+        ]
       },
       "gridPos": { "h": 8, "w": 16, "x": 0, "y": 24 },
       "id": 13,
