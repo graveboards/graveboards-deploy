@@ -40,6 +40,43 @@ function Write-Error { Write-Host "[ERROR]" -ForegroundColor $ColorError -NoNewl
 function Write-Warning { Write-Host "[WARN]" -ForegroundColor $ColorWarning -NoNewline; Write-Host " $args" }
 
 # =========================
+# Grafana deploy annotation
+# =========================
+
+function Invoke-GrafanaAnnotation {
+    param(
+        [string]$Text,
+        [string]$Tags
+    )
+
+    $grafanaUrl = if ($env:GRAFANA_URL) { $env:GRAFANA_URL } else { "http://localhost:3001" }
+    $grafanaToken = $env:GRAFANA_DEPLOY_ANNOTATION_TOKEN
+
+    if (-not $grafanaToken) {
+        Write-Info "GRAFANA_DEPLOY_ANNOTATION_TOKEN not set — skipping Grafana annotation."
+        return
+    }
+
+    Write-Info "Pushing deploy annotation to Grafana: $Text"
+    $timestamp = [int]((Get-Date -UFormat %s) * 1000)
+    $body = @{
+        text = $Text
+        tags = @($Tags -split ',')
+        time = $timestamp
+    } | ConvertTo-Json -Depth 3
+
+    try {
+        Invoke-RestMethod -Uri "${grafanaUrl}/api/annotations" -Method Post -Headers @{
+            Authorization = "Bearer ${grafanaToken}"
+            "Content-Type" = "application/json"
+        } -Body $body -ErrorAction Stop | Out-Null
+        Write-Success "Grafana annotation pushed."
+    } catch {
+        Write-Warning "Failed to push Grafana annotation (non-fatal): $_"
+    }
+}
+
+# =========================
 # Docker Compose command detection
 # =========================
 
@@ -869,6 +906,9 @@ function Cmd-Deploy {
         Write-Success "Services started!"
         Invoke-Compose -Mode $mode -NoMonitoring $noMonitoring -Nas $nas -Traefik $traefik -MonitoringPorts $monitoringPorts -MonitoringTraefik $monitoringTraefik -ExtraArgs @("logs", "-f")
     }
+
+    $deployText = "deploy ${mode} by ${env:USERNAME} @ $(Get-Date -Format 'HH:mm')"
+    Invoke-GrafanaAnnotation -Text $deployText -Tags "deploy,graveboards"
 }
 
 function Cmd-Logs {

@@ -35,6 +35,41 @@ write_error() { printf "${ColorError}[ERROR]${ColorReset} %b\n" "$1"; }
 write_warning() { printf "${ColorWarning}[WARN]${ColorReset} %b\n" "$1"; }
 
 # =========================
+# Grafana deploy annotation
+# =========================
+
+grafana_annotation() {
+    local text="$1"
+    local tags="$2"
+    local grafana_url
+    grafana_url="${GRAFANA_URL:-http://localhost:3001}"
+    local grafana_token
+    grafana_token="${GRAFANA_DEPLOY_ANNOTATION_TOKEN:-}"
+
+    if [[ -z "$grafana_token" ]]; then
+        write_info "GRAFANA_DEPLOY_ANNOTATION_TOKEN not set — skipping Grafana annotation."
+        return 0
+    fi
+
+    write_info "Pushing deploy annotation to Grafana: $text"
+    local timestamp
+    timestamp=$(date +%s)000
+    curl -sS -f -X POST \
+        "${grafana_url}/api/annotations" \
+        -H "Authorization: Bearer ${grafana_token}" \
+        -H "Content-Type: application/json" \
+        -d "{
+            \"text\": \"${text}\",
+            \"tags\": [${tags}],
+            \"time\": ${timestamp}
+        }" >/dev/null 2>&1 || {
+        write_warning "Failed to push Grafana annotation (non-fatal)."
+        return 0
+    }
+    write_success "Grafana annotation pushed."
+}
+
+# =========================
 # Docker Compose command detection
 # =========================
 
@@ -795,6 +830,9 @@ cmd_deploy() {
         write_success "Services started!"
         compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik" "$MonitoringPorts" "$MonitoringTraefik" logs -f
     fi
+
+    local deploy_text="deploy ${Mode} by $(whoami) @ $(date +%H:%M)"
+    grafana_annotation "$deploy_text" '"deploy","graveboards"'
 }
 
 cmd_logs() {

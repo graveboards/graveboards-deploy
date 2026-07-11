@@ -180,3 +180,67 @@ queries. Available recordings:
 | `instance:node_cpu_utilization:ratio5m` | `1 - avg(rate(node_cpu_seconds_total{mode="idle"}[5m]))` |
 | `job:redis_cache:hit_ratio5m` | redis cache hit ratio (windowed) |
 | `job:pg_cache:hit_ratio5m` | Postgres block cache hit ratio (windowed) |
+
+## Deploy annotations
+
+Two mechanisms mark deploys on every dashboard's time charts:
+
+### 1. `graveboards_build_info` metric (automatic)
+
+The backend exports a gauge at startup:
+
+```
+graveboards_build_info{version="0.1.0", commit="a1b2c3d"} 1
+```
+
+Grafana turns version *changes* into annotations automatically via an annotation query:
+
+```jsonc
+{
+  "name": "Deploys (build_info)",
+  "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+  "enable": true,
+  "expr": "changes(graveboards_build_info[1m]) > 0",
+  "iconColor": "blue",
+  "nameFormat": "Deploy {{version}} ({{commit}})",
+  "textFormat": "{{version}} @ {{commit}}",
+  "titleFormat": "Deploy",
+  "type": "tags"
+}
+```
+
+Add this to the `annotations.list` of any dashboard that should show deploy markers.
+
+### 2. Grafana API annotation (from deploy script)
+
+Set `GRAFANA_DEPLOY_ANNOTATION_TOKEN` in the environment before running `deploy.sh` / `deploy.ps1`:
+
+```bash
+export GRAFANA_DEPLOY_ANNOTATION_TOKEN="glsa_..."
+export GRAFANA_URL="http://localhost:3001"  # optional, defaults to localhost:3001
+./deploy.sh deploy prod
+```
+
+The deploy script pushes an annotation with the mode, operator, and timestamp. The token is a Grafana API key with `annotation:write` scope. If the token is not set the annotation is skipped silently (non-fatal).
+
+### Adding a version stat panel
+
+To show the current version in a dashboard KPI strip, add a stat panel:
+
+```jsonc
+{
+  "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+  "fieldConfig": { "defaults": { "custom": { "align": "center" } } },
+  "gridPos": { "h": 4, "w": 4, "x": 20, "y": 1 },
+  "options": {
+    "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }
+  },
+  "targets": [{
+    "expr": "graveboards_build_info",
+    "legendFormat": "{{version}} ({{commit}})",
+    "refId": "A"
+  }],
+  "title": "Version",
+  "type": "stat"
+}
+```
