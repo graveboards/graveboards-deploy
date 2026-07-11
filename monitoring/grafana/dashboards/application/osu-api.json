@@ -203,7 +203,7 @@
       "links": [
         {
           "title": "View Logs",
-          "url": "/d/graveboards-logs?var_logger=app.osu_api&from=${__from}&to=${__to}",
+          "url": "/d/graveboards-logs?var-logger=app.osu_api&from=${__from}&to=${__to}",
           "targetBlank": false,
           "type": "link"
         }
@@ -258,7 +258,7 @@
       "links": [
         {
           "title": "View Logs",
-          "url": "/d/graveboards-logs?var_logger=app.osu_api&from=${__from}&to=${__to}",
+          "url": "/d/graveboards-logs?var-logger=app.osu_api&from=${__from}&to=${__to}",
           "targetBlank": false,
           "type": "link"
         }
@@ -318,7 +318,7 @@
       "links": [
         {
           "title": "View Logs",
-          "url": "/d/graveboards-logs?var_logger=app.osu_api&from=${__from}&to=${__to}",
+          "url": "/d/graveboards-logs?var-logger=app.osu_api&from=${__from}&to=${__to}",
           "targetBlank": false,
           "type": "link"
         }
@@ -359,7 +359,7 @@
       "links": [
         {
           "title": "View Logs",
-          "url": "/d/graveboards-logs?var_logger=app.osu_api&from=${__from}&to=${__to}",
+          "url": "/d/graveboards-logs?var-logger=app.osu_api&from=${__from}&to=${__to}",
           "targetBlank": false,
           "type": "link"
         }
@@ -404,7 +404,7 @@
       "links": [
         {
           "title": "View Logs",
-          "url": "/d/graveboards-logs?var_logger=app.osu_api&from=${__from}&to=${__to}",
+          "url": "/d/graveboards-logs?var-logger=app.osu_api&from=${__from}&to=${__to}",
           "targetBlank": false,
           "type": "link"
         }
@@ -445,7 +445,7 @@
       "links": [
         {
           "title": "View Logs",
-          "url": "/d/graveboards-logs?var_logger=app.osu_api&from=${__from}&to=${__to}",
+          "url": "/d/graveboards-logs?var-logger=app.osu_api&from=${__from}&to=${__to}",
           "targetBlank": false,
           "type": "link"
         }

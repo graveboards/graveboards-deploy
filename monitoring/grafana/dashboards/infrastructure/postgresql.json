@@ -197,7 +197,7 @@
         },
         {
           "title": "View Logs",
-          "url": "/d/graveboards-logs?var_logger=app.database&from=${__from}&to=${__to}",
+          "url": "/d/graveboards-logs?var-logger=app.database&from=${__from}&to=${__to}",
           "targetBlank": false,
           "type": "link"
         }
@@ -244,7 +244,7 @@
       "links": [
         {
           "title": "View Logs",
-          "url": "/d/graveboards-logs?var_logger=app.database&from=${__from}&to=${__to}",
+          "url": "/d/graveboards-logs?var-logger=app.database&from=${__from}&to=${__to}",
           "targetBlank": false,
           "type": "link"
         }
@@ -284,7 +284,7 @@
       "links": [
         {
           "title": "View Logs",
-          "url": "/d/graveboards-logs?var_logger=app.database&from=${__from}&to=${__to}",
+          "url": "/d/graveboards-logs?var-logger=app.database&from=${__from}&to=${__to}",
           "targetBlank": false,
           "type": "link"
         }
@@ -321,7 +321,7 @@
       "links": [
         {
           "title": "View Logs",
-          "url": "/d/graveboards-logs?var_logger=app.database&from=${__from}&to=${__to}",
+          "url": "/d/graveboards-logs?var-logger=app.database&from=${__from}&to=${__to}",
           "targetBlank": false,
           "type": "link"
         }
@@ -396,7 +396,7 @@
       "links": [
         {
           "title": "View Logs",
-          "url": "/d/graveboards-logs?var_logger=app.database&from=${__from}&to=${__to}",
+          "url": "/d/graveboards-logs?var-logger=app.database&from=${__from}&to=${__to}",
           "targetBlank": false,
           "type": "link"
         }
@@ -436,7 +436,7 @@
       "links": [
         {
           "title": "View Logs",
-          "url": "/d/graveboards-logs?var_logger=app.database&from=${__from}&to=${__to}",
+          "url": "/d/graveboards-logs?var-logger=app.database&from=${__from}&to=${__to}",
           "targetBlank": false,
           "type": "link"
         }
@@ -473,7 +473,7 @@
       "links": [
         {
           "title": "View Logs",
-          "url": "/d/graveboards-logs?var_logger=app.database&from=${__from}&to=${__to}",
+          "url": "/d/graveboards-logs?var-logger=app.database&from=${__from}&to=${__to}",
           "targetBlank": false,
           "type": "link"
         }

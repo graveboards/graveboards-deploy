@@ -149,7 +149,7 @@ Panels that should link to another dashboard set a `links` array:
 "links": [
   {
     "title": "View in Logs Explorer",
-    "url": "/d/graveboards-logs?var-service=backend&var-level=error&var_logger=&var_search=&var_request_id=&from=${__from}&to=${__to}",
+    "url": "/d/graveboards-logs?var-service=backend&var-level=error&var-logger=&var-search=&var-request_id=&from=${__from}&to=${__to}",
     "targetBlank": false,
     "type": "link"
   }

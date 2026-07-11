@@ -229,7 +229,7 @@
       "links": [
         {
           "title": "View Logs",
-          "url": "/d/graveboards-logs?var-service=backend&var_level=error&from=${__from}&to=${__to}",
+          "url": "/d/graveboards-logs?var-service=backend&var-level=error&from=${__from}&to=${__to}",
           "targetBlank": false,
           "type": "link"
         }
@@ -299,7 +299,7 @@
       "links": [
         {
           "title": "View Logs",
-          "url": "/d/graveboards-logs?var-service=backend&var_level=error&from=${__from}&to=${__to}",
+          "url": "/d/graveboards-logs?var-service=backend&var-level=error&from=${__from}&to=${__to}",
           "targetBlank": false,
           "type": "link"
         }
@@ -364,7 +364,7 @@
       "links": [
         {
           "title": "View Logs",
-          "url": "/d/graveboards-logs?var-service=backend&var_level=error&from=${__from}&to=${__to}",
+          "url": "/d/graveboards-logs?var-service=backend&var-level=error&from=${__from}&to=${__to}",
           "targetBlank": false,
           "type": "link"
         }
@@ -411,7 +411,7 @@
       "links": [
         {
           "title": "View Logs",
-          "url": "/d/graveboards-logs?var-service=backend&var_level=error&from=${__from}&to=${__to}",
+          "url": "/d/graveboards-logs?var-service=backend&var-level=error&from=${__from}&to=${__to}",
           "targetBlank": false,
           "type": "link"
         }
