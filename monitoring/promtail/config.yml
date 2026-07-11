@@ -52,13 +52,17 @@ scrape_configs:
                     - graveboards-postgresql
                     - graveboards-redis
       relabel_configs:
+          # Docker's name filter above substring-matches, so it also picks up
+          # graveboards-redis-exporter; drop it here by compose service label
+          # instead of container name (which carries a leading "/" that broke
+          # the previous name-anchored regex).
+          - source_labels:
+                - __meta_docker_container_label_com_docker_compose_service
+            regex: 'redis-exporter'
+            action: drop
           - source_labels:
                 - __meta_docker_container_label_com_docker_compose_service
             target_label: service
           - source_labels:
                 - __meta_docker_container_log_stream
             target_label: stream
-          - source_labels:
-                - __meta_docker_container_name
-            regex: '^(graveboards-redis-exporter)$'
-            action: drop
