@@ -360,7 +360,35 @@
         }
       ],
       "title": "Request-ID Trace",
-      "description": "Paste a request ID to see all log lines for that request. Activates once the backend emits `request_id` (companion Phase 1).",
+      "description": "Paste a request ID (or the X-Request-ID response header value from a bug report) to see every log line for that single request.",
+      "type": "logs"
+    },
+    {
+      "datasource": { "type": "loki", "uid": "${datasource_loki}" },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 40 },
+      "id": 14,
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": true,
+        "showTime": true,
+        "showLabels": true,
+        "showCommonLabels": false,
+        "enableLogDetailsOpenClose": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending",
+        "timestampFormat": "2006-01-02 15:04:05",
+        "direction": "bottom"
+      },
+      "targets": [
+        {
+          "expr": "{service=~\"postgresql|redis\"} |= \"$search\"",
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ],
+      "title": "Infrastructure Logs (raw)",
+      "description": "Plain-text postgresql/redis container logs. Deliberately not JSON-parsed (they aren't JSON) — kept out of the main Log Stream above so it doesn't show JSONParserErr/unknown-level noise.",
       "type": "logs"
     }
   ],
@@ -399,7 +427,7 @@
         "type": "datasource"
       },
       {
-        "current": { "selected": false, "text": "All", "value": ["__all"] },
+        "current": { "selected": false, "text": "backend", "value": "backend" },
         "hide": 0,
         "includeAll": true,
         "label": "Service",
