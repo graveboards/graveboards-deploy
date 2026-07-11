@@ -105,7 +105,6 @@ function Invoke-Compose {
         [string]$NoMonitoring = "false",
         [string]$Nas = "false",
         [string]$Traefik = "false",
-        [string]$MonitoringPorts = "false",
         [string]$MonitoringTraefik = "false",
         [string[]]$ExtraArgs = @()
     )
@@ -136,7 +135,7 @@ function Invoke-Compose {
 
     if ($Mode -ne "test" -and $NoMonitoring -ne "true") {
         $composeFiles += "-f", "$SCRIPT_DIR\docker-compose.monitoring.yml"
-        if ($Mode -eq "dev" -and $MonitoringPorts -eq "true") {
+        if ($Mode -eq "dev") {
             $composeFiles += "-f", "$SCRIPT_DIR\docker-compose.monitoring.ports.yml"
         }
         if ($MonitoringTraefik -eq "true") {
@@ -543,12 +542,12 @@ Graveboards Deployment Script
 Usage: .\deploy.ps1 [command] [args...]
 
 Commands:
-  up [mode] [--follow|-f] [--build] [--no-monitoring] [--nas] [--traefik] [--monitoring-ports] [service...]  - Start services (default: dev)
+  up [mode] [--follow|-f] [--build] [--no-monitoring] [--nas] [--traefik] [service...]  - Start services (default: dev)
   down [mode] [--no-monitoring] [--nas] [--traefik] [service...]              - Stop services (default: all)
   build [mode] [--no-monitoring] [--nas] [--traefik] [service...]             - Build images (default: dev)
   pull [repo...]                                          - Git pull repos (all or: backend, frontend, deploy)
   force-pull [repo...]                                    - Force reset repos to origin
-  deploy [mode] [--follow|-f] [--no-monitoring] [--nas] [--traefik] [--monitoring-ports] - Full pipeline: down + pull + build + up
+  deploy [mode] [--follow|-f] [--no-monitoring] [--nas] [--traefik] - Full pipeline: down + pull + build + up
   logs [mode] [--no-monitoring] [--nas] [--traefik] [service] - View logs (default: dev all)
   test [--log-file <path>] [--no-cleanup] [--no-log] [--quiet] - Run tests (saves output to log file by default)
   status                                                  - Show status
@@ -566,7 +565,6 @@ Flags:
   --no-monitoring         - Skip monitoring stack
   --nas                   - Include NAS volume overrides (prod only)
   --traefik               - Include Traefik overrides for frontend + Grafana (prod only, requires traefik-proxy network)
-  --monitoring-ports      - Publish monitoring ports to host (dev only, for local access to Prometheus/Grafana/Loki)
   --monitoring-traefik    - Include Traefik routes for monitoring services (prod only)
 
 Services (for up, down, build, logs):
@@ -579,7 +577,6 @@ Services (for up, down, build, logs):
 Examples:
   .\deploy.ps1 up dev                           # Start dev mode (detached + follow logs)
   .\deploy.ps1 up dev --follow                  # Start dev mode (foreground)
-  .\deploy.ps1 up dev --monitoring-ports        # Start dev with monitoring ports on host
   .\deploy.ps1 up dev backend                   # Start only backend in dev
   .\deploy.ps1 up prod                          # Start prod (no NAS, no Traefik, monitoring internal-only)
   .\deploy.ps1 up prod --nas                    # Start prod with NAS volumes
@@ -647,7 +644,6 @@ function Parse-ModeAndFlags {
         [ref]$OutNoMonitoring,
         [ref]$OutNas,
         [ref]$OutTraefik,
-        [ref]$OutMonitoringPorts,
         [ref]$OutMonitoringTraefik,
         [ref]$OutBuild,
         [ref]$OutExtra
@@ -658,7 +654,6 @@ function Parse-ModeAndFlags {
     $OutNoMonitoring.Value = "false"
     $OutNas.Value = "false"
     $OutTraefik.Value = "false"
-    $OutMonitoringPorts.Value = "false"
     $OutMonitoringTraefik.Value = "false"
     $OutBuild.Value = "false"
     $OutExtra.Value = @()
@@ -674,8 +669,6 @@ function Parse-ModeAndFlags {
             $OutNas.Value = "true"
         } elseif ($arg -eq "--traefik") {
             $OutTraefik.Value = "true"
-        } elseif ($arg -eq "--monitoring-ports") {
-            $OutMonitoringPorts.Value = "true"
         } elseif ($arg -eq "--monitoring-traefik") {
             $OutMonitoringTraefik.Value = "true"
         } elseif ($arg -eq "--build") {
@@ -693,8 +686,8 @@ function Parse-ModeAndFlags {
 function Cmd-Up {
     param([string[]]$InputArgs)
 
-    $mode = "" ; $follow = "" ; $noMonitoring = "" ; $nas = "" ; $traefik = "" ; $monitoringPorts = "" ; $monitoringTraefik = "" ; $build = "" ; $extra = @()
-    Parse-ModeAndFlags -InputArgs $InputArgs -OutMode ([ref]$mode) -OutFollow ([ref]$follow) -OutNoMonitoring ([ref]$noMonitoring) -OutNas ([ref]$nas) -OutTraefik ([ref]$traefik) -OutMonitoringPorts ([ref]$monitoringPorts) -OutMonitoringTraefik ([ref]$monitoringTraefik) -OutBuild ([ref]$build) -OutExtra ([ref]$extra)
+    $mode = "" ; $follow = "" ; $noMonitoring = "" ; $nas = "" ; $traefik = "" ; $monitoringTraefik = "" ; $build = "" ; $extra = @()
+    Parse-ModeAndFlags -InputArgs $InputArgs -OutMode ([ref]$mode) -OutFollow ([ref]$follow) -OutNoMonitoring ([ref]$noMonitoring) -OutNas ([ref]$nas) -OutTraefik ([ref]$traefik) -OutMonitoringTraefik ([ref]$monitoringTraefik) -OutBuild ([ref]$build) -OutExtra ([ref]$extra)
 
     if ($traefik -eq "true") {
         try {
@@ -714,11 +707,11 @@ function Cmd-Up {
     if ($follow -eq "false") {
         Write-Info "Starting Graveboards in $mode mode..."
         if ($mode -ne "test") {
-            Invoke-Compose -Mode $mode -NoMonitoring $noMonitoring -Nas $nas -Traefik $traefik -MonitoringPorts $monitoringPorts -MonitoringTraefik $monitoringTraefik -ExtraArgs (@("up") + $buildArgs + "-d" + $extra)
+            Invoke-Compose -Mode $mode -NoMonitoring $noMonitoring -Nas $nas -Traefik $traefik -MonitoringTraefik $monitoringTraefik -ExtraArgs (@("up") + $buildArgs + "-d" + $extra)
             Write-Success "Services started!"
-            Invoke-Compose -Mode $mode -NoMonitoring $noMonitoring -Nas $nas -Traefik $traefik -MonitoringPorts $monitoringPorts -MonitoringTraefik $monitoringTraefik -ExtraArgs (@("logs", "-f") + $extra)
+            Invoke-Compose -Mode $mode -NoMonitoring $noMonitoring -Nas $nas -Traefik $traefik -MonitoringTraefik $monitoringTraefik -ExtraArgs (@("logs", "-f") + $extra)
         } else {
-            Invoke-Compose -Mode $mode -NoMonitoring $noMonitoring -Nas $nas -Traefik $traefik -MonitoringPorts $monitoringPorts -MonitoringTraefik $monitoringTraefik -ExtraArgs (@("--profile", "test", "up", "--build") + $extra)
+            Invoke-Compose -Mode $mode -NoMonitoring $noMonitoring -Nas $nas -Traefik $traefik -MonitoringTraefik $monitoringTraefik -ExtraArgs (@("--profile", "test", "up", "--build") + $extra)
         }
     } else {
         Write-Info "Starting Graveboards in $mode mode (foreground)..."
@@ -734,7 +727,7 @@ function Cmd-Up {
         }
         if ($mode -ne "test") {
             $composeFiles += "-f", "$SCRIPT_DIR\docker-compose.monitoring.yml"
-            if ($mode -eq "dev" -and $monitoringPorts -eq "true") {
+            if ($mode -eq "dev") {
                 $composeFiles += "-f", "$SCRIPT_DIR\docker-compose.monitoring.ports.yml"
             }
             if ($monitoringTraefik -eq "true") {
@@ -762,15 +755,15 @@ function Cmd-Up {
 function Cmd-Down {
     param([string[]]$InputArgs)
 
-    $mode = "" ; $noMonitoring = "" ; $nas = "" ; $traefik = "" ; $monitoringPorts = "" ; $monitoringTraefik = "" ; $build = "" ; $extra = @()
-    Parse-ModeAndFlags -InputArgs $InputArgs -OutMode ([ref]$mode) -OutNoMonitoring ([ref]$noMonitoring) -OutNas ([ref]$nas) -OutTraefik ([ref]$traefik) -OutMonitoringPorts ([ref]$monitoringPorts) -OutMonitoringTraefik ([ref]$monitoringTraefik) -OutBuild ([ref]$build) -OutExtra ([ref]$extra)
+    $mode = "" ; $noMonitoring = "" ; $nas = "" ; $traefik = "" ; $monitoringTraefik = "" ; $build = "" ; $extra = @()
+    Parse-ModeAndFlags -InputArgs $InputArgs -OutMode ([ref]$mode) -OutNoMonitoring ([ref]$noMonitoring) -OutNas ([ref]$nas) -OutTraefik ([ref]$traefik) -OutMonitoringTraefik ([ref]$monitoringTraefik) -OutBuild ([ref]$build) -OutExtra ([ref]$extra)
 
     Write-Info "Stopping Graveboards services..."
 
     if ($extra.Count -gt 0) {
-        Invoke-Compose -Mode $mode -NoMonitoring $noMonitoring -Nas $nas -Traefik $traefik -MonitoringPorts $monitoringPorts -MonitoringTraefik $monitoringTraefik -ExtraArgs (@("down") + $extra)
+        Invoke-Compose -Mode $mode -NoMonitoring $noMonitoring -Nas $nas -Traefik $traefik -MonitoringTraefik $monitoringTraefik -ExtraArgs (@("down") + $extra)
     } else {
-        Invoke-Compose -Mode $mode -NoMonitoring $noMonitoring -Nas $nas -Traefik $traefik -MonitoringPorts $monitoringPorts -MonitoringTraefik $monitoringTraefik -ExtraArgs @("down")
+        Invoke-Compose -Mode $mode -NoMonitoring $noMonitoring -Nas $nas -Traefik $traefik -MonitoringTraefik $monitoringTraefik -ExtraArgs @("down")
     }
     Write-Success "Services stopped!"
 }
@@ -778,15 +771,15 @@ function Cmd-Down {
 function Cmd-Build {
     param([string[]]$InputArgs)
 
-    $mode = "" ; $noMonitoring = "" ; $nas = "" ; $traefik = "" ; $monitoringPorts = "" ; $monitoringTraefik = "" ; $build = "" ; $extra = @()
-    Parse-ModeAndFlags -InputArgs $InputArgs -OutMode ([ref]$mode) -OutNoMonitoring ([ref]$noMonitoring) -OutNas ([ref]$nas) -OutTraefik ([ref]$traefik) -OutMonitoringPorts ([ref]$monitoringPorts) -OutMonitoringTraefik ([ref]$monitoringTraefik) -OutBuild ([ref]$build) -OutExtra ([ref]$extra)
+    $mode = "" ; $noMonitoring = "" ; $nas = "" ; $traefik = "" ; $monitoringTraefik = "" ; $build = "" ; $extra = @()
+    Parse-ModeAndFlags -InputArgs $InputArgs -OutMode ([ref]$mode) -OutNoMonitoring ([ref]$noMonitoring) -OutNas ([ref]$nas) -OutTraefik ([ref]$traefik) -OutMonitoringTraefik ([ref]$monitoringTraefik) -OutBuild ([ref]$build) -OutExtra ([ref]$extra)
 
     Write-Info "Building Graveboards images for $mode mode..."
 
     if ($extra.Count -gt 0) {
-        Invoke-Compose -Mode $mode -NoMonitoring $noMonitoring -Nas $nas -Traefik $traefik -MonitoringPorts $monitoringPorts -MonitoringTraefik $monitoringTraefik -ExtraArgs (@("build") + $extra)
+        Invoke-Compose -Mode $mode -NoMonitoring $noMonitoring -Nas $nas -Traefik $traefik -MonitoringTraefik $monitoringTraefik -ExtraArgs (@("build") + $extra)
     } else {
-        Invoke-Compose -Mode $mode -NoMonitoring $noMonitoring -Nas $nas -Traefik $traefik -MonitoringPorts $monitoringPorts -MonitoringTraefik $monitoringTraefik -ExtraArgs @("build")
+        Invoke-Compose -Mode $mode -NoMonitoring $noMonitoring -Nas $nas -Traefik $traefik -MonitoringTraefik $monitoringTraefik -ExtraArgs @("build")
     }
 
     Cleanup-SpecCache
@@ -847,8 +840,8 @@ function Cmd-ForcePull {
 function Cmd-Deploy {
     param([string[]]$InputArgs)
 
-    $mode = "" ; $follow = "" ; $noMonitoring = "" ; $nas = "" ; $traefik = "" ; $monitoringPorts = "" ; $monitoringTraefik = "" ; $build = "" ; $extra = @()
-    Parse-ModeAndFlags -InputArgs $InputArgs -OutMode ([ref]$mode) -OutFollow ([ref]$follow) -OutNoMonitoring ([ref]$noMonitoring) -OutNas ([ref]$nas) -OutTraefik ([ref]$traefik) -OutMonitoringPorts ([ref]$monitoringPorts) -OutMonitoringTraefik ([ref]$monitoringTraefik) -OutBuild ([ref]$build) -OutExtra ([ref]$extra)
+    $mode = "" ; $follow = "" ; $noMonitoring = "" ; $nas = "" ; $traefik = "" ; $monitoringTraefik = "" ; $build = "" ; $extra = @()
+    Parse-ModeAndFlags -InputArgs $InputArgs -OutMode ([ref]$mode) -OutFollow ([ref]$follow) -OutNoMonitoring ([ref]$noMonitoring) -OutNas ([ref]$nas) -OutTraefik ([ref]$traefik) -OutMonitoringTraefik ([ref]$monitoringTraefik) -OutBuild ([ref]$build) -OutExtra ([ref]$extra)
 
     if ($traefik -eq "true") {
         try {
@@ -861,7 +854,7 @@ function Cmd-Deploy {
     }
 
     Write-Info "Stopping services..."
-    Invoke-Compose -Mode $mode -NoMonitoring $noMonitoring -Nas $nas -Traefik $traefik -MonitoringPorts $monitoringPorts -MonitoringTraefik $monitoringTraefik -ExtraArgs @("down")
+    Invoke-Compose -Mode $mode -NoMonitoring $noMonitoring -Nas $nas -Traefik $traefik -MonitoringTraefik $monitoringTraefik -ExtraArgs @("down")
 
     Write-Info "Pulling latest code..."
     $pullArgs = @()
@@ -871,7 +864,7 @@ function Cmd-Deploy {
     }
 
     Write-Info "Building images..."
-    Invoke-Compose -Mode $mode -NoMonitoring $noMonitoring -Nas $nas -Traefik $traefik -MonitoringPorts $monitoringPorts -MonitoringTraefik $monitoringTraefik -ExtraArgs @("build")
+    Invoke-Compose -Mode $mode -NoMonitoring $noMonitoring -Nas $nas -Traefik $traefik -MonitoringTraefik $monitoringTraefik -ExtraArgs @("build")
     Cleanup-SpecCache
 
     Write-Info "Starting services..."
@@ -888,7 +881,7 @@ function Cmd-Deploy {
         }
         if ($mode -ne "test") {
             $composeFiles += "-f", "$SCRIPT_DIR\docker-compose.monitoring.yml"
-            if ($mode -eq "dev" -and $monitoringPorts -eq "true") {
+            if ($mode -eq "dev") {
                 $composeFiles += "-f", "$SCRIPT_DIR\docker-compose.monitoring.ports.yml"
             }
             if ($monitoringTraefik -eq "true") {
@@ -902,9 +895,9 @@ function Cmd-Deploy {
         }
         Wait-Process -Id $script:COMPOSE_PROCESS_PID
     } else {
-        Invoke-Compose -Mode $mode -NoMonitoring $noMonitoring -Nas $nas -Traefik $traefik -MonitoringPorts $monitoringPorts -MonitoringTraefik $monitoringTraefik -ExtraArgs @("up", "-d")
+        Invoke-Compose -Mode $mode -NoMonitoring $noMonitoring -Nas $nas -Traefik $traefik -MonitoringTraefik $monitoringTraefik -ExtraArgs @("up", "-d")
         Write-Success "Services started!"
-        Invoke-Compose -Mode $mode -NoMonitoring $noMonitoring -Nas $nas -Traefik $traefik -MonitoringPorts $monitoringPorts -MonitoringTraefik $monitoringTraefik -ExtraArgs @("logs", "-f")
+        Invoke-Compose -Mode $mode -NoMonitoring $noMonitoring -Nas $nas -Traefik $traefik -MonitoringTraefik $monitoringTraefik -ExtraArgs @("logs", "-f")
     }
 
     $deployText = "deploy ${mode} by ${env:USERNAME} @ $(Get-Date -Format 'HH:mm')"
@@ -914,8 +907,8 @@ function Cmd-Deploy {
 function Cmd-Logs {
     param([string[]]$InputArgs)
 
-    $mode = "" ; $noMonitoring = "" ; $nas = "" ; $traefik = "" ; $monitoringPorts = "" ; $monitoringTraefik = "" ; $build = "" ; $extra = @()
-    Parse-ModeAndFlags -InputArgs $InputArgs -OutMode ([ref]$mode) -OutNoMonitoring ([ref]$noMonitoring) -OutNas ([ref]$nas) -OutTraefik ([ref]$traefik) -OutMonitoringPorts ([ref]$monitoringPorts) -OutMonitoringTraefik ([ref]$monitoringTraefik) -OutBuild ([ref]$build) -OutExtra ([ref]$extra)
+    $mode = "" ; $noMonitoring = "" ; $nas = "" ; $traefik = "" ; $monitoringTraefik = "" ; $build = "" ; $extra = @()
+    Parse-ModeAndFlags -InputArgs $InputArgs -OutMode ([ref]$mode) -OutNoMonitoring ([ref]$noMonitoring) -OutNas ([ref]$nas) -OutTraefik ([ref]$traefik) -OutMonitoringTraefik ([ref]$monitoringTraefik) -OutBuild ([ref]$build) -OutExtra ([ref]$extra)
 
     $service = "all"
     if ($extra.Count -gt 0) {
@@ -923,15 +916,15 @@ function Cmd-Logs {
     }
 
     switch ($service) {
-        "all" { Invoke-Compose -Mode $mode -NoMonitoring $noMonitoring -Nas $nas -Traefik $traefik -MonitoringPorts $monitoringPorts -MonitoringTraefik $monitoringTraefik -ExtraArgs @("logs", "-f") }
-        "backend" { Invoke-Compose -Mode $mode -NoMonitoring $noMonitoring -Nas $nas -Traefik $traefik -MonitoringPorts $monitoringPorts -MonitoringTraefik $monitoringTraefik -ExtraArgs @("logs", "-f", "backend") }
-        "frontend" { Invoke-Compose -Mode $mode -NoMonitoring $noMonitoring -Nas $nas -Traefik $traefik -MonitoringPorts $monitoringPorts -MonitoringTraefik $monitoringTraefik -ExtraArgs @("logs", "-f", "frontend") }
-        "postgres" { Invoke-Compose -Mode $mode -NoMonitoring $noMonitoring -Nas $nas -Traefik $traefik -MonitoringPorts $monitoringPorts -MonitoringTraefik $monitoringTraefik -ExtraArgs @("logs", "-f", "postgresql") }
-        "postgresql" { Invoke-Compose -Mode $mode -NoMonitoring $noMonitoring -Nas $nas -Traefik $traefik -MonitoringPorts $monitoringPorts -MonitoringTraefik $monitoringTraefik -ExtraArgs @("logs", "-f", "postgresql") }
-        "redis" { Invoke-Compose -Mode $mode -NoMonitoring $noMonitoring -Nas $nas -Traefik $traefik -MonitoringPorts $monitoringPorts -MonitoringTraefik $monitoringTraefik -ExtraArgs @("logs", "-f", "redis") }
+        "all" { Invoke-Compose -Mode $mode -NoMonitoring $noMonitoring -Nas $nas -Traefik $traefik -MonitoringTraefik $monitoringTraefik -ExtraArgs @("logs", "-f") }
+        "backend" { Invoke-Compose -Mode $mode -NoMonitoring $noMonitoring -Nas $nas -Traefik $traefik -MonitoringTraefik $monitoringTraefik -ExtraArgs @("logs", "-f", "backend") }
+        "frontend" { Invoke-Compose -Mode $mode -NoMonitoring $noMonitoring -Nas $nas -Traefik $traefik -MonitoringTraefik $monitoringTraefik -ExtraArgs @("logs", "-f", "frontend") }
+        "postgres" { Invoke-Compose -Mode $mode -NoMonitoring $noMonitoring -Nas $nas -Traefik $traefik -MonitoringTraefik $monitoringTraefik -ExtraArgs @("logs", "-f", "postgresql") }
+        "postgresql" { Invoke-Compose -Mode $mode -NoMonitoring $noMonitoring -Nas $nas -Traefik $traefik -MonitoringTraefik $monitoringTraefik -ExtraArgs @("logs", "-f", "postgresql") }
+        "redis" { Invoke-Compose -Mode $mode -NoMonitoring $noMonitoring -Nas $nas -Traefik $traefik -MonitoringTraefik $monitoringTraefik -ExtraArgs @("logs", "-f", "redis") }
         default {
             Write-Info "Service '$service' not found. Showing all logs..."
-            Invoke-Compose -Mode $mode -NoMonitoring $noMonitoring -Nas $nas -Traefik $traefik -MonitoringPorts $monitoringPorts -MonitoringTraefik $monitoringTraefik -ExtraArgs @("logs", "-f")
+            Invoke-Compose -Mode $mode -NoMonitoring $noMonitoring -Nas $nas -Traefik $traefik -MonitoringTraefik $monitoringTraefik -ExtraArgs @("logs", "-f")
         }
     }
 }
