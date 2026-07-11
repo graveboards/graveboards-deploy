@@ -230,11 +230,6 @@ validate_monitoring() {
         fi
     fi
 
-    # Check LOG_FORMAT is set
-    if [[ -z "${LOG_FORMAT}" ]]; then
-        write_warning "LOG_FORMAT is not set (default: text). Set to 'json' for prod with Loki"
-    fi
-
     if [[ "$has_errors" -eq 0 ]]; then
         write_success "Monitoring configuration valid for prod"
         return 0

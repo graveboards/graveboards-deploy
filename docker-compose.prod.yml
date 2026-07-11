@@ -88,7 +88,6 @@ services:
             - REDIS_USERNAME=${REDIS_USERNAME:-}
             - REDIS_PASSWORD=${REDIS_PASSWORD}
             - REDIS_DB=${REDIS_DB:-0}
-            - LOG_FORMAT=json
         healthcheck:
             test: [ "CMD", "curl", "-f", "http://localhost:8000/api/v1/health" ]
             interval: 60s

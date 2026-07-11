@@ -282,7 +282,6 @@ See [Production Deployment Guide](./docs/PRODUCTION_DEPLOYMENT.md#volume-configu
 **Monitoring Variables (prod required):**
 - `GRAFANA_ADMIN_PASSWORD` - Grafana admin password (must not be a default value)
 - `ALERTMANAGER_DISCORD_WEBHOOK_URL` - Discord webhook for alerts
-- `LOG_FORMAT` - `text` (dev) or `json` (prod with Loki)
 
 **Volume Variables (optional, defaults configured):**
 - `POSTGRESQL_DATA_PATH` - PostgreSQL data directory

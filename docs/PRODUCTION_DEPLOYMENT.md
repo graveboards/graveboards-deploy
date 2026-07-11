@@ -67,8 +67,6 @@ OSU_CLIENT_SECRET=<your-client-secret>
 # Base URL (your domain)
 BASE_URL=https://graveboards.example.com
 
-# Logging (JSON for Loki compatibility)
-LOG_FORMAT=json
 ```
 
 ### Monitoring Configuration (prod required)
@@ -317,7 +315,7 @@ View logs:
 ./deploy.sh logs prod backend -f
 ```
 
-**Log format:** JSON in prod (`LOG_FORMAT=json`), colored console in dev. Every line includes `request_id` for correlation with Loki.
+**Log format:** the backend always writes clean colored lines to stdout (`docker compose logs`) and structured JSON to `instance/logs/app.jsonl`, which promtail tails — no env var needed. Every line includes `request_id` when a request is in flight, for correlation with Loki.
 
 Query Loki from Grafana Explore:
 ```logql

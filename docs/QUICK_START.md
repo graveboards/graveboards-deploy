@@ -132,7 +132,6 @@ POSTGRESQL_PASSWORD=<openssl-rand-base64-32>
 DEBUG=false
 DISABLE_SECURITY=false
 BASE_URL=https://your-domain.com
-LOG_FORMAT=json
 ```
 
 **Monitoring (required for prod):**
