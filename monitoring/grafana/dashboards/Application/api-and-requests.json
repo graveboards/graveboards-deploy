@@ -493,7 +493,7 @@
           }
         ]
       },
-      "gridPos": { "h": 8, "w": 16, "x": 0, "y": 24 },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 24 },
       "id": 13,
       "links": [
         {
@@ -517,7 +517,73 @@
         }
       ],
       "title": "Endpoints by Rate",
-      "description": "Top 10 endpoints by request rate. Per-endpoint breakdown activates after the route-label fix (companion Phase 2).",
+      "description": "Top 10 endpoints by request rate.",
+      "type": "table"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "custom": {
+            "align": "auto",
+            "displayMode": "color-background",
+            "inspect": false
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "amber", "value": 1 },
+              { "color": "red", "value": 5 }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "endpoint" },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "View logs for this endpoint",
+                    "url": "/d/graveboards-logs?var-service=backend&var-logger=app.access&var-search=${__value.text}&from=${__from}&to=${__to}",
+                    "targetBlank": false
+                  }
+                ]
+              },
+              { "id": "custom.displayMode", "value": "auto" }
+            ]
+          }
+        ]
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 24 },
+      "id": 19,
+      "links": [
+        {
+          "title": "View Logs",
+          "url": "/d/graveboards-logs?var-service=backend&var-level=error&from=${__from}&to=${__to}",
+          "targetBlank": false,
+          "type": "link"
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          { "desc": true, "displayName": "Value" }
+        ]
+      },
+      "targets": [
+        {
+          "expr": "topk(10, sum(rate(http_requests_total{status_code=~\"4..|5..\"}[5m])) by (endpoint) / sum(rate(http_requests_total[5m])) by (endpoint) * 100)",
+          "legendFormat": "{{endpoint}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Endpoints by Error %",
+      "description": "Top 10 endpoints by 4xx/5xx error percentage.",
       "type": "table"
     },
     {
@@ -525,25 +591,56 @@
       "fieldConfig": {
         "defaults": {
           "custom": {
-            "align": "center",
+            "align": "auto",
             "displayMode": "auto",
             "inspect": false
+          },
+          "unit": "s"
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "endpoint" },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "View logs for this endpoint",
+                    "url": "/d/graveboards-logs?var-service=backend&var-logger=app.access&var-search=${__value.text}&from=${__from}&to=${__to}",
+                    "targetBlank": false
+                  }
+                ]
+              }
+            ]
           }
-        }
+        ]
       },
       "gridPos": { "h": 8, "w": 8, "x": 16, "y": 24 },
-      "id": 14,
+      "id": 20,
+      "links": [
+        {
+          "title": "View Logs",
+          "url": "/d/graveboards-logs?var-service=backend&from=${__from}&to=${__to}",
+          "targetBlank": false,
+          "type": "link"
+        }
+      ],
       "options": {
-        "code": {
-          "language": "markdown",
-          "showLineNumbers": false,
-          "showMiniMap": false
-        },
-        "content": "<div style=\"padding: 16px; text-align: center;\">\n  <h3 style=\"color: #e0a000;\">Per-Endpoint Breakdown Pending</h3>\n  <p>The `endpoint` label on `http_requests_total` currently shows `<unmatched>` for all series due to a route templating issue upstream.</p>\n  <p>Once fixed (companion Phase 2), this table will show real per-endpoint rate, error %, and p95 latency.</p>\n  <p style=\"color: #888;\">The aggregate charts above are unaffected and show total traffic.</p>\n</div>",
-        "mode": "html"
+        "showHeader": true,
+        "sortBy": [
+          { "desc": true, "displayName": "Value" }
+        ]
       },
-      "title": "Note",
-      "type": "text"
+      "targets": [
+        {
+          "expr": "topk(10, histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le, endpoint)))",
+          "legendFormat": "{{endpoint}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Endpoints by p95 Latency",
+      "description": "Top 10 endpoints by 95th percentile latency.",
+      "type": "table"
     },
     {
       "collapsed": false,
