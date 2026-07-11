@@ -3,9 +3,9 @@
     "list": [
       {
         "builtIn": 0,
-        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
         "enable": true,
-        "expr": "count(ALERTS{alertstate=\"firing\"}) > 0",
+        "expr": "ALERTS{alertstate=\"firing\"}",
         "hide": false,
         "iconColor": "red",
         "name": "Firing Alerts",

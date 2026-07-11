@@ -3,9 +3,9 @@
     "list": [
       {
         "builtIn": 0,
-        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
         "enable": true,
-        "expr": "count(ALERTS{alertstate=\"firing\"}) > 0",
+        "expr": "ALERTS{alertstate=\"firing\"}",
         "hide": false,
         "iconColor": "red",
         "name": "Firing Alerts",
@@ -379,6 +379,20 @@
         "name": "datasource_loki",
         "options": [],
         "query": "loki",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "datasource"
+      },
+      {
+        "current": {},
+        "hide": 0,
+        "includeAll": false,
+        "label": "Prometheus",
+        "multi": false,
+        "name": "datasource_prometheus",
+        "options": [],
+        "query": "prometheus",
         "refresh": 1,
         "regex": "",
         "skipUrlSync": false,
