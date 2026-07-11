@@ -189,31 +189,31 @@
           {
             "matcher": { "id": "byName", "options": "debug" },
             "properties": [
-              { "id": "color", "value": { "fixedColor": "super-light-purple", "mode": "fixed" } }
+              { "id": "color", "value": { "fixedColor": "#969696", "mode": "fixed" } }
             ]
           },
           {
             "matcher": { "id": "byName", "options": "info" },
             "properties": [
-              { "id": "color", "value": { "fixedColor": "blue", "mode": "fixed" } }
+              { "id": "color", "value": { "fixedColor": "#7EB26D", "mode": "fixed" } }
             ]
           },
           {
             "matcher": { "id": "byName", "options": "warning" },
             "properties": [
-              { "id": "color", "value": { "fixedColor": "amber", "mode": "fixed" } }
+              { "id": "color", "value": { "fixedColor": "#EAB839", "mode": "fixed" } }
             ]
           },
           {
             "matcher": { "id": "byName", "options": "error" },
             "properties": [
-              { "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }
+              { "id": "color", "value": { "fixedColor": "#F2495C", "mode": "fixed" } }
             ]
           },
           {
             "matcher": { "id": "byName", "options": "critical" },
             "properties": [
-              { "id": "color", "value": { "fixedColor": "dark-red", "mode": "fixed" } }
+              { "id": "color", "value": { "fixedColor": "#A50000", "mode": "fixed" } }
             ]
           }
         ]
