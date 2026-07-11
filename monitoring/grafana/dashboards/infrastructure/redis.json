@@ -115,6 +115,14 @@
       },
       "gridPos": { "h": 4, "w": 6, "x": 12, "y": 1 },
       "id": 4,
+      "links": [
+        {
+          "title": "View Host / System",
+          "url": "/d/graveboards-host?from=${__from}&to=${__to}",
+          "targetBlank": false,
+          "type": "link"
+        }
+      ],
       "options": {
         "reduceOptions": {
           "calcs": ["lastNotNull"],
@@ -224,6 +232,12 @@
       "gridPos": { "h": 8, "w": 8, "x": 8, "y": 6 },
       "id": 8,
       "links": [
+        {
+          "title": "View Host / System",
+          "url": "/d/graveboards-host?from=${__from}&to=${__to}",
+          "targetBlank": false,
+          "type": "link"
+        },
         {
           "title": "View Logs",
           "url": "/d/graveboards-logs?var_logger=app.redis&from=${__from}&to=${__to}",

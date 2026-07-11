@@ -190,6 +190,12 @@
       "id": 7,
       "links": [
         {
+          "title": "View Host / System",
+          "url": "/d/graveboards-host?from=${__from}&to=${__to}",
+          "targetBlank": false,
+          "type": "link"
+        },
+        {
           "title": "View Logs",
           "url": "/d/graveboards-logs?var_logger=app.database&from=${__from}&to=${__to}",
           "targetBlank": false,
