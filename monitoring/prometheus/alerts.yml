@@ -126,14 +126,36 @@ groups:
                 summary: "High osu! API error rate (>50%)"
                 description: "More than 50% of osu! API requests are failing."
 
-          - alert: DaemonStalled
-            expr: time() - daemon_last_job_timestamp > 1800
-            for: 5m
+          - alert: DaemonServiceDown
+            expr: daemon_service_running == 0
+            for: 1m
+            labels:
+                severity: critical
+            annotations:
+                summary: "Daemon service {{ $labels.service }} is down"
+                description: "The {{ $labels.service }} daemon service has stopped running."
+
+          - alert: DaemonJobFailureRateHigh
+            expr: |
+                sum(rate(daemon_jobs_total{status="failure"}[10m])) by (service)
+                /
+                sum(rate(daemon_jobs_total[10m])) by (service)
+                > 0.5
+            for: 10m
             labels:
                 severity: warning
             annotations:
-                summary: "Daemon service has not run in 30 minutes"
-                description: "The {{ $labels.service }} daemon has not completed a run in over 30 minutes."
+                summary: "High daemon job failure rate for {{ $labels.service }}"
+                description: "More than 50% of daemon jobs have been failing for {{ $labels.service }} over the last 10 minutes."
+
+          - alert: DaemonJobDurationHigh
+            expr: histogram_quantile(0.95, sum(rate(daemon_job_duration_seconds_bucket[10m])) by (le, service)) > 300
+            for: 10m
+            labels:
+                severity: warning
+            annotations:
+                summary: "Daemon job duration p95 high for {{ $labels.service }}"
+                description: "The 95th percentile job duration for {{ $labels.service }} has exceeded 5 minutes for over 10 minutes."
 
           - alert: HighCPUUsage
             expr: rate(process_cpu_seconds_total[5m]) > 0.8
