@@ -9,26 +9,20 @@ clients:
     - url: http://loki:3100/loki/api/v1/push
 
 scrape_configs:
-    - job_name: backend-logs
-      docker_sd_configs:
-          - host: unix:///var/run/docker.sock
-            refresh_interval: 5s
-            filters:
-                - name: name
-                  values:
-                    - graveboards-backend
-      relabel_configs:
-          - source_labels:
-                - __meta_docker_container_label_com_docker_compose_service
-            target_label: service
-          - source_labels:
-                - __meta_docker_container_log_stream
-            target_label: stream
-
+    # Backend now writes structured JSON straight to a file (see
+    # app/observability/logging.py) instead of stdout, so stdout can stay
+    # human-readable in every environment without a LOG_FORMAT env var.
+    # Tailing the file directly means every JSON object is already exactly
+    # one line — no multiline stage needed, structlog renders exceptions as
+    # a single field before the line is ever written.
+    - job_name: backend-json-logs
+      static_configs:
+          - targets:
+                - localhost
+            labels:
+                service: backend
+                __path__: /var/log/graveboards/backend/logs/app.jsonl
       pipeline_stages:
-          - multiline:
-              firstline: '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+'
-              max_wait_time: 3s
           - json:
               expressions:
                   timestamp: timestamp

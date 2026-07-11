@@ -131,6 +131,13 @@ services:
             - /var/lib/docker/containers:/var/lib/docker/containers:ro
             - /var/run/docker.sock:/var/run/docker.sock:ro
             - ./monitoring/promtail:/etc/promtail:ro
+            # Same volume/path the backend service mounts as its own
+            # instance dir (docker-compose.yml / docker-compose.prod.yml /
+            # docker-compose.prod.nas.yml all set INSTANCE_DATA_PATH, or the
+            # dev bind path below is used as a fallback default). This file
+            # is always loaded last (see deploy.sh), so it can't itself be
+            # overridden per-environment — the env var is what varies.
+            - ${INSTANCE_DATA_PATH:-../graveboards-backend/instance}:/var/log/graveboards/backend:ro
         networks:
             - app
         command: -config.file=/etc/promtail/config.yml
