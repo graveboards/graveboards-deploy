@@ -139,33 +139,7 @@
       "title": "Total Log Rate",
       "type": "stat"
     },
-    {
-      "datasource": { "type": "loki", "uid": "${datasource_loki}" },
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "thresholds" },
-          "unit": "short"
-        }
-      },
-      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 1 },
-      "id": 5,
-      "options": {
-        "reduceOptions": {
-          "calcs": ["lastNotNull"],
-          "fields": "",
-          "values": false
-        }
-      },
-      "targets": [
-        {
-          "expr": "count(count by (logger) ({service=~\"$service\", level=\"error\"} | json))",
-          "legendFormat": "Error loggers",
-          "refId": "A"
-        }
-      ],
-      "title": "Distinct Error Loggers",
-      "type": "stat"
-    },
+
     {
       "collapsed": false,
       "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 },
