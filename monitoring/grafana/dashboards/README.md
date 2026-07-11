@@ -160,10 +160,10 @@ Panels that should link to another dashboard set a `links` array:
 
 ```
 monitoring/grafana/dashboards/
-  overview/            → Platform Overview
-  application/         → API & Requests, Background Jobs, osu! API
-  infrastructure/      → Host / System, PostgreSQL, Redis
-  logs/                → Logs Explorer
+  Overview/            → Platform Overview
+  Application/         → API & Requests, Background Jobs, osu! API
+  Infrastructure/      → Host / System, PostgreSQL, Redis
+  Logs/                → Logs Explorer
 ```
 
 ## Recording rules
