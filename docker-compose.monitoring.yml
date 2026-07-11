@@ -18,6 +18,8 @@ services:
             - "--web.listen-address=0.0.0.0:9090"
         volumes:
             - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+            - ./monitoring/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+            - ./monitoring/prometheus/rules:/etc/prometheus/rules:ro
             - prometheus-data:/prometheus
         networks:
             - app
