@@ -104,19 +104,19 @@
           {
             "matcher": { "id": "byRegexp", "options": ".*success.*" },
             "properties": [
-              { "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }
+              { "id": "color", "value": { "fixedColor": "#73BF69", "mode": "fixed" } }
             ]
           },
           {
             "matcher": { "id": "byRegexp", "options": ".*failure.*" },
             "properties": [
-              { "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }
+              { "id": "color", "value": { "fixedColor": "#F2495C", "mode": "fixed" } }
             ]
           },
           {
             "matcher": { "id": "byRegexp", "options": ".*critical.*" },
             "properties": [
-              { "id": "color", "value": { "fixedColor": "dark-red", "mode": "fixed" } }
+              { "id": "color", "value": { "fixedColor": "#A50000", "mode": "fixed" } }
             ]
           }
         ]

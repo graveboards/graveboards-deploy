@@ -201,25 +201,25 @@
           {
             "matcher": { "id": "byName", "options": "2xx" },
             "properties": [
-              { "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }
+              { "id": "color", "value": { "fixedColor": "#73BF69", "mode": "fixed" } }
             ]
           },
           {
             "matcher": { "id": "byName", "options": "3xx" },
             "properties": [
-              { "id": "color", "value": { "fixedColor": "blue", "mode": "fixed" } }
+              { "id": "color", "value": { "fixedColor": "#5794F2", "mode": "fixed" } }
             ]
           },
           {
             "matcher": { "id": "byName", "options": "4xx" },
             "properties": [
-              { "id": "color", "value": { "fixedColor": "amber", "mode": "fixed" } }
+              { "id": "color", "value": { "fixedColor": "#EAB839", "mode": "fixed" } }
             ]
           },
           {
             "matcher": { "id": "byName", "options": "5xx" },
             "properties": [
-              { "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }
+              { "id": "color", "value": { "fixedColor": "#F2495C", "mode": "fixed" } }
             ]
           }
         ]
@@ -283,13 +283,13 @@
           {
             "matcher": { "id": "byName", "options": "4xx %" },
             "properties": [
-              { "id": "color", "value": { "fixedColor": "amber", "mode": "fixed" } }
+              { "id": "color", "value": { "fixedColor": "#EAB839", "mode": "fixed" } }
             ]
           },
           {
             "matcher": { "id": "byName", "options": "5xx %" },
             "properties": [
-              { "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }
+              { "id": "color", "value": { "fixedColor": "#F2495C", "mode": "fixed" } }
             ]
           }
         ]
@@ -342,19 +342,19 @@
           {
             "matcher": { "id": "byName", "options": "p50" },
             "properties": [
-              { "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }
+              { "id": "color", "value": { "fixedColor": "#73BF69", "mode": "fixed" } }
             ]
           },
           {
             "matcher": { "id": "byName", "options": "p95" },
             "properties": [
-              { "id": "color", "value": { "fixedColor": "amber", "mode": "fixed" } }
+              { "id": "color", "value": { "fixedColor": "#EAB839", "mode": "fixed" } }
             ]
           },
           {
             "matcher": { "id": "byName", "options": "p99" },
             "properties": [
-              { "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }
+              { "id": "color", "value": { "fixedColor": "#F2495C", "mode": "fixed" } }
             ]
           }
         ]
