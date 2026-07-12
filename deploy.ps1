@@ -651,49 +651,43 @@ if (-not (Test-DockerRunning)) {
 
 function Parse-ModeAndFlags {
     param(
-        [string[]]$InputArgs,
-        [ref]$OutMode,
-        [ref]$OutFollow,
-        [ref]$OutNoMonitoring,
-        [ref]$OutNas,
-        [ref]$OutTraefik,
-        [ref]$OutMonitoringTraefik,
-        [ref]$OutBuild,
-        [ref]$OutNoFrontend,
-        [ref]$OutExtra
+        [string[]]$InputArgs
     )
 
-    $OutMode.Value = "dev"
-    $OutFollow.Value = "false"
-    $OutNoMonitoring.Value = "false"
-    $OutNas.Value = "false"
-    $OutTraefik.Value = "false"
-    $OutMonitoringTraefik.Value = "false"
-    $OutBuild.Value = "false"
-    $OutNoFrontend.Value = "false"
-    $OutExtra.Value = @()
+    $result = [PSCustomObject]@{
+        Mode = "dev"
+        Follow = "false"
+        NoMonitoring = "false"
+        Nas = "false"
+        Traefik = "false"
+        MonitoringTraefik = "false"
+        Build = "false"
+        NoFrontend = "false"
+        Extra = @()
+    }
 
     foreach ($arg in $InputArgs) {
-        if ($arg -match '^(dev|prod|test)$' -and $OutMode.Value -eq "dev") {
-            $OutMode.Value = $arg
+        if ($arg -match '^(dev|prod|test)$' -and $result.Mode -eq "dev") {
+            $result.Mode = $arg
         } elseif ($arg -match '^(--follow|-f)$') {
-            $OutFollow.Value = "true"
+            $result.Follow = "true"
         } elseif ($arg -eq "--no-monitoring") {
-            $OutNoMonitoring.Value = "true"
+            $result.NoMonitoring = "true"
         } elseif ($arg -eq "--nas") {
-            $OutNas.Value = "true"
+            $result.Nas = "true"
         } elseif ($arg -eq "--traefik") {
-            $OutTraefik.Value = "true"
+            $result.Traefik = "true"
         } elseif ($arg -eq "--monitoring-traefik") {
-            $OutMonitoringTraefik.Value = "true"
+            $result.MonitoringTraefik = "true"
         } elseif ($arg -eq "--build") {
-            $OutBuild.Value = "true"
+            $result.Build = "true"
         } elseif ($arg -eq "--no-frontend") {
-            $OutNoFrontend.Value = "true"
+            $result.NoFrontend = "true"
         } else {
-            $OutExtra.Value += $arg
+            $result.Extra += $arg
         }
     }
+    return $result
 }
 
 # =========================
@@ -703,8 +697,8 @@ function Parse-ModeAndFlags {
 function Cmd-Up {
     param([string[]]$InputArgs)
 
-    $mode = "" ; $follow = "" ; $noMonitoring = "" ; $nas = "" ; $traefik = "" ; $monitoringTraefik = "" ; $build = "" ; $noFrontend = "" ; $extra = @()
-    Parse-ModeAndFlags -InputArgs $InputArgs -OutMode ([ref]$mode) -OutFollow ([ref]$follow) -OutNoMonitoring ([ref]$noMonitoring) -OutNas ([ref]$nas) -OutTraefik ([ref]$traefik) -OutMonitoringTraefik ([ref]$monitoringTraefik) -OutBuild ([ref]$build) -OutNoFrontend ([ref]$noFrontend) -OutExtra ([ref]$extra)
+    $parsed = Parse-ModeAndFlags -InputArgs $InputArgs
+    $mode = $parsed.Mode; $follow = $parsed.Follow; $noMonitoring = $parsed.NoMonitoring; $nas = $parsed.Nas; $traefik = $parsed.Traefik; $monitoringTraefik = $parsed.MonitoringTraefik; $build = $parsed.Build; $noFrontend = $parsed.NoFrontend; $extra = $parsed.Extra
 
     if ($traefik -eq "true") {
         try {
@@ -754,8 +748,8 @@ function Cmd-Up {
 function Cmd-Down {
     param([string[]]$InputArgs)
 
-    $mode = "" ; $noMonitoring = "" ; $nas = "" ; $traefik = "" ; $monitoringTraefik = "" ; $build = "" ; $extra = @()
-    Parse-ModeAndFlags -InputArgs $InputArgs -OutMode ([ref]$mode) -OutNoMonitoring ([ref]$noMonitoring) -OutNas ([ref]$nas) -OutTraefik ([ref]$traefik) -OutMonitoringTraefik ([ref]$monitoringTraefik) -OutBuild ([ref]$build) -OutExtra ([ref]$extra)
+    $parsed = Parse-ModeAndFlags -InputArgs $InputArgs
+    $mode = $parsed.Mode; $noMonitoring = $parsed.NoMonitoring; $nas = $parsed.Nas; $traefik = $parsed.Traefik; $monitoringTraefik = $parsed.MonitoringTraefik; $build = $parsed.Build; $noFrontend = $parsed.NoFrontend; $extra = $parsed.Extra
 
     Write-Info "Stopping Graveboards services..."
 
@@ -770,8 +764,8 @@ function Cmd-Down {
 function Cmd-Build {
     param([string[]]$InputArgs)
 
-    $mode = "" ; $noMonitoring = "" ; $nas = "" ; $traefik = "" ; $monitoringTraefik = "" ; $build = "" ; $extra = @()
-    Parse-ModeAndFlags -InputArgs $InputArgs -OutMode ([ref]$mode) -OutNoMonitoring ([ref]$noMonitoring) -OutNas ([ref]$nas) -OutTraefik ([ref]$traefik) -OutMonitoringTraefik ([ref]$monitoringTraefik) -OutBuild ([ref]$build) -OutExtra ([ref]$extra)
+    $parsed = Parse-ModeAndFlags -InputArgs $InputArgs
+    $mode = $parsed.Mode; $noMonitoring = $parsed.NoMonitoring; $nas = $parsed.Nas; $traefik = $parsed.Traefik; $monitoringTraefik = $parsed.MonitoringTraefik; $build = $parsed.Build; $noFrontend = $parsed.NoFrontend; $extra = $parsed.Extra
 
     Write-Info "Building Graveboards images for $mode mode..."
 
@@ -839,8 +833,8 @@ function Cmd-ForcePull {
 function Cmd-Deploy {
     param([string[]]$InputArgs)
 
-    $mode = "" ; $follow = "" ; $noMonitoring = "" ; $nas = "" ; $traefik = "" ; $monitoringTraefik = "" ; $build = "" ; $extra = @()
-    Parse-ModeAndFlags -InputArgs $InputArgs -OutMode ([ref]$mode) -OutFollow ([ref]$follow) -OutNoMonitoring ([ref]$noMonitoring) -OutNas ([ref]$nas) -OutTraefik ([ref]$traefik) -OutMonitoringTraefik ([ref]$monitoringTraefik) -OutBuild ([ref]$build) -OutExtra ([ref]$extra)
+    $parsed = Parse-ModeAndFlags -InputArgs $InputArgs
+    $mode = $parsed.Mode; $follow = $parsed.Follow; $noMonitoring = $parsed.NoMonitoring; $nas = $parsed.Nas; $traefik = $parsed.Traefik; $monitoringTraefik = $parsed.MonitoringTraefik; $build = $parsed.Build; $noFrontend = $parsed.NoFrontend; $extra = $parsed.Extra
 
     if ($traefik -eq "true") {
         try {
@@ -906,8 +900,8 @@ function Cmd-Deploy {
 function Cmd-Logs {
     param([string[]]$InputArgs)
 
-    $mode = "" ; $noMonitoring = "" ; $nas = "" ; $traefik = "" ; $monitoringTraefik = "" ; $build = "" ; $extra = @()
-    Parse-ModeAndFlags -InputArgs $InputArgs -OutMode ([ref]$mode) -OutNoMonitoring ([ref]$noMonitoring) -OutNas ([ref]$nas) -OutTraefik ([ref]$traefik) -OutMonitoringTraefik ([ref]$monitoringTraefik) -OutBuild ([ref]$build) -OutExtra ([ref]$extra)
+    $parsed = Parse-ModeAndFlags -InputArgs $InputArgs
+    $mode = $parsed.Mode; $noMonitoring = $parsed.NoMonitoring; $nas = $parsed.Nas; $traefik = $parsed.Traefik; $monitoringTraefik = $parsed.MonitoringTraefik; $build = $parsed.Build; $noFrontend = $parsed.NoFrontend; $extra = $parsed.Extra
 
     $service = "all"
     if ($extra.Count -gt 0) {
