@@ -113,19 +113,19 @@ function Build-ComposeArgs {
 
     switch ($Mode) {
         "dev" {
-            $composeFiles += "-f", "$SCRIPT_DIR\docker-compose.yml"
+            $composeFiles += "-f", "$SCRIPT_DIR/docker-compose.yml"
         }
         "prod" {
-            $composeFiles += "-f", "$SCRIPT_DIR\docker-compose.prod.yml"
+            $composeFiles += "-f", "$SCRIPT_DIR/docker-compose.prod.yml"
             if ($Nas -eq "true") {
-                $composeFiles += "-f", "$SCRIPT_DIR\docker-compose.prod.nas.yml"
+                $composeFiles += "-f", "$SCRIPT_DIR/docker-compose.prod.nas.yml"
             }
             if ($Traefik -eq "true") {
-                $composeFiles += "-f", "$SCRIPT_DIR\docker-compose.prod.traefik.yml"
+                $composeFiles += "-f", "$SCRIPT_DIR/docker-compose.prod.traefik.yml"
             }
         }
         "test" {
-            $composeFiles += "-f", "$SCRIPT_DIR\docker-compose.test.yml"
+            $composeFiles += "-f", "$SCRIPT_DIR/docker-compose.test.yml"
         }
         default {
             Write-Error "Unknown mode: $Mode"
@@ -134,12 +134,12 @@ function Build-ComposeArgs {
     }
 
     if ($Mode -ne "test" -and $NoMonitoring -ne "true") {
-        $composeFiles += "-f", "$SCRIPT_DIR\docker-compose.monitoring.yml"
+        $composeFiles += "-f", "$SCRIPT_DIR/docker-compose.monitoring.yml"
         if ($Mode -eq "dev") {
-            $composeFiles += "-f", "$SCRIPT_DIR\docker-compose.monitoring.ports.yml"
+            $composeFiles += "-f", "$SCRIPT_DIR/docker-compose.monitoring.ports.yml"
         }
         if ($MonitoringTraefik -eq "true") {
-            $composeFiles += "-f", "$SCRIPT_DIR\docker-compose.monitoring.traefik.yml"
+            $composeFiles += "-f", "$SCRIPT_DIR/docker-compose.monitoring.traefik.yml"
         }
     }
 
@@ -246,10 +246,10 @@ $script:COMPOSE_PROCESS_PID = $null
 
 function Cleanup-Services {
     Write-Info "Stopping services..."
-    $composeFiles = @("-f", "$SCRIPT_DIR\docker-compose.yml",
-                      "-f", "$SCRIPT_DIR\docker-compose.prod.yml",
-                      "-f", "$SCRIPT_DIR\docker-compose.test.yml",
-                      "-f", "$SCRIPT_DIR\docker-compose.monitoring.yml",
+    $composeFiles = @("-f", "$SCRIPT_DIR/docker-compose.yml",
+                      "-f", "$SCRIPT_DIR/docker-compose.prod.yml",
+                      "-f", "$SCRIPT_DIR/docker-compose.test.yml",
+                      "-f", "$SCRIPT_DIR/docker-compose.monitoring.yml",
                       "down", "--remove-orphans")
     if ($COMPOSE_CMD.Count -gt 1) {
         & docker compose @composeFiles 2>$null
@@ -289,7 +289,7 @@ function Get-ConfigTargets {
 # A target is "missing" (safe to write) when absent or zero-length.
 function Test-NeedsContent {
     param([string]$Path)
-    return (-not (Test-Path -LiteralPath $Path)) -or ((Get-Item -LiteralPath $Path).Length -eq 0)
+    return (-not (Test-Path -LiteralPath $Path)) -or ((Get-Item -LiteralPath $Path -Force -ErrorAction SilentlyContinue).Length -eq 0)
 }
 
 $script:CreatedFiles = @()
@@ -425,31 +425,31 @@ function Generate-ConfigFiles {
     Write-ConfigFile -Path (Join-Path $configDir "bootstrap.yaml") -Content $yamlContent
 
     # --- Generate bootstrap.test.yaml ---
-    $testYaml = @"
-master_queue:
-  name: "Graveboards Queue"
-  description: "Master queue for beatmaps to receive leaderboards"
-  user_id: 1
-extra_queues: []
-initial_users:
-  - user_id: 1
-    roles: [admin]
-    generate_api_key: true
-    enable_score_fetcher: true
-  - user_id: 2
-    roles: [admin]
-    generate_api_key: true
-    enable_score_fetcher: true
-initial_roles:
-  - admin
-setup_steps:
-  - create_database
-  - seed_roles
-  - seed_users
-  - seed_api_keys
-  - seed_queues
-"@
-    Write-ConfigFile -Path (Join-Path $configDir "bootstrap.test.yaml") -Content $testYaml
+    $testYamlLines = @()
+    $testYamlLines += "master_queue:"
+    $testYamlLines += "  name: `"Graveboards Queue`""
+    $testYamlLines += "  description: `"Master queue for beatmaps to receive leaderboards`""
+    $testYamlLines += "  user_id: 1"
+    $testYamlLines += "extra_queues: []"
+    $testYamlLines += "initial_users:"
+    $testYamlLines += "  - user_id: 1"
+    $testYamlLines += "    roles: [admin]"
+    $testYamlLines += "    generate_api_key: true"
+    $testYamlLines += "    enable_score_fetcher: true"
+    $testYamlLines += "  - user_id: 2"
+    $testYamlLines += "    roles: [admin]"
+    $testYamlLines += "    generate_api_key: true"
+    $testYamlLines += "    enable_score_fetcher: true"
+    $testYamlLines += "initial_roles:"
+    $testYamlLines += "  - admin"
+    $testYamlLines += "setup_steps:"
+    $testYamlLines += "  - create_database"
+    $testYamlLines += "  - seed_roles"
+    $testYamlLines += "  - seed_users"
+    $testYamlLines += "  - seed_api_keys"
+    $testYamlLines += "  - seed_queues"
+    $testYamlContent = $testYamlLines -join "`n"
+    Write-ConfigFile -Path (Join-Path $configDir "bootstrap.test.yaml") -Content $testYamlContent
 
     # Create .env for direct Python dev mode
     $envDevContent = @"
@@ -749,7 +749,7 @@ function Cmd-Up {
                 $script:COMPOSE_PROCESS_PID = (Start-Process -FilePath $COMPOSE_CMD[0] -ArgumentList ($composeFiles + @("up") + $buildArgs + $extra) -NoNewWindow -PassThru).Id
             }
         } else {
-            $testComposeFiles = @("-f", "$SCRIPT_DIR\docker-compose.test.yml")
+            $testComposeFiles = @("-f", "$SCRIPT_DIR/docker-compose.test.yml")
             if ($COMPOSE_CMD.Count -gt 1) {
                 $script:COMPOSE_PROCESS_PID = (Start-Process -FilePath $COMPOSE_CMD[0] -ArgumentList (@("compose") + $testComposeFiles + @("up", "--profile", "test", "--build") + $extra) -NoNewWindow -PassThru).Id
             } else {
@@ -879,21 +879,21 @@ function Cmd-Deploy {
     if ($follow -eq "true") {
         $composeFiles = @()
         switch ($mode) {
-            "dev" { $composeFiles += "-f", "$SCRIPT_DIR\docker-compose.yml" }
+            "dev" { $composeFiles += "-f", "$SCRIPT_DIR/docker-compose.yml" }
             "prod" {
-                $composeFiles += "-f", "$SCRIPT_DIR\docker-compose.prod.yml"
-                if ($nas -eq "true") { $composeFiles += "-f", "$SCRIPT_DIR\docker-compose.prod.nas.yml" }
-                if ($traefik -eq "true") { $composeFiles += "-f", "$SCRIPT_DIR\docker-compose.prod.traefik.yml" }
+                $composeFiles += "-f", "$SCRIPT_DIR/docker-compose.prod.yml"
+                if ($nas -eq "true") { $composeFiles += "-f", "$SCRIPT_DIR/docker-compose.prod.nas.yml" }
+                if ($traefik -eq "true") { $composeFiles += "-f", "$SCRIPT_DIR/docker-compose.prod.traefik.yml" }
             }
-            "test" { $composeFiles += "-f", "$SCRIPT_DIR\docker-compose.test.yml" }
+            "test" { $composeFiles += "-f", "$SCRIPT_DIR/docker-compose.test.yml" }
         }
         if ($mode -ne "test") {
-            $composeFiles += "-f", "$SCRIPT_DIR\docker-compose.monitoring.yml"
+            $composeFiles += "-f", "$SCRIPT_DIR/docker-compose.monitoring.yml"
             if ($mode -eq "dev") {
-                $composeFiles += "-f", "$SCRIPT_DIR\docker-compose.monitoring.ports.yml"
+                $composeFiles += "-f", "$SCRIPT_DIR/docker-compose.monitoring.ports.yml"
             }
             if ($monitoringTraefik -eq "true") {
-                $composeFiles += "-f", "$SCRIPT_DIR\docker-compose.monitoring.traefik.yml"
+                $composeFiles += "-f", "$SCRIPT_DIR/docker-compose.monitoring.traefik.yml"
             }
         }
         if ($COMPOSE_CMD.Count -gt 1) {
@@ -986,10 +986,10 @@ function Cmd-Test {
 
     if ($Quiet) {
         Write-Info "Building test image (quiet)..."
-        docker compose -f "$SCRIPT_DIR\docker-compose.test.yml" --profile test build --quiet 2>$null
+        docker compose -f "$SCRIPT_DIR/docker-compose.test.yml" --profile test build --quiet 2>$null
     } else {
         Write-Info "Building test image..."
-        docker compose -f "$SCRIPT_DIR\docker-compose.test.yml" --profile test build
+        docker compose -f "$SCRIPT_DIR/docker-compose.test.yml" --profile test build
     }
 
     Write-Info "Starting test services (PostgreSQL, Redis, and backend)..."
@@ -1000,7 +1000,7 @@ function Cmd-Test {
     $maxHealthRetries = 30
     $healthy = $false
     while ($healthRetries -lt $maxHealthRetries -and -not $healthy) {
-        $psOutput = docker compose -f "$SCRIPT_DIR\docker-compose.test.yml" ps postgresql redis 2>$null
+        $psOutput = docker compose -f "$SCRIPT_DIR/docker-compose.test.yml" ps postgresql redis 2>$null
         if ($psOutput -match "healthy") {
             $healthy = $true
         }
@@ -1010,7 +1010,7 @@ function Cmd-Test {
 
     if (-not $healthy) {
         Write-Error "Test services did not become healthy in time"
-        docker compose -f "$SCRIPT_DIR\docker-compose.test.yml" logs backend 2>&1
+        docker compose -f "$SCRIPT_DIR/docker-compose.test.yml" logs backend 2>&1
         if (-not $NoCleanup) {
             Invoke-Compose -Mode "test" -ExtraArgs @("down", "-v", "--remove-orphans")
         }
@@ -1021,12 +1021,12 @@ function Cmd-Test {
     if ($Logfile) {
         Write-Info "Running tests (real-time output to terminal and $(Split-Path $Logfile -Leaf))..."
         $composeArgs = @("logs", "-f", "backend")
-        $null = docker compose -f "$SCRIPT_DIR\docker-compose.test.yml" @composeArgs 2>&1 | Tee-Object -FilePath $Logfile
+        $null = docker compose -f "$SCRIPT_DIR/docker-compose.test.yml" @composeArgs 2>&1 | Tee-Object -FilePath $Logfile
         $exitCode = $LASTEXITCODE
     } else {
         Write-Info "Running tests (real-time output to terminal)..."
         $composeArgs = @("logs", "-f", "backend")
-        $null = docker compose -f "$SCRIPT_DIR\docker-compose.test.yml" @composeArgs 2>&1
+        $null = docker compose -f "$SCRIPT_DIR/docker-compose.test.yml" @composeArgs 2>&1
         $exitCode = $LASTEXITCODE
     }
 
@@ -1034,7 +1034,7 @@ function Cmd-Test {
         Write-Error "Unexpected non-zero exit code: $exitCode (logs may have been truncated)"
     }
 
-    $backendContainerId = docker compose -f "$SCRIPT_DIR\docker-compose.test.yml" ps -q backend 2>$null | Select-Object -First 1
+    $backendContainerId = docker compose -f "$SCRIPT_DIR/docker-compose.test.yml" ps -q backend 2>$null | Select-Object -First 1
     if ($backendContainerId) {
         $containerExitCode = docker inspect --format '{{.State.ExitCode}}' $backendContainerId 2>$null
         if ($containerExitCode -and $containerExitCode -ne 0) {
@@ -1109,9 +1109,9 @@ function Cmd-Clean {
 
     if ($confirm -eq "yes") {
         Write-Info "Removing volumes and images..."
-        $composeFiles1 = @("-f", "$SCRIPT_DIR\docker-compose.yml",
-                           "-f", "$SCRIPT_DIR\docker-compose.test.yml",
-                           "-f", "$SCRIPT_DIR\docker-compose.monitoring.yml",
+        $composeFiles1 = @("-f", "$SCRIPT_DIR/docker-compose.yml",
+                           "-f", "$SCRIPT_DIR/docker-compose.test.yml",
+                           "-f", "$SCRIPT_DIR/docker-compose.monitoring.yml",
                            "down", "-v", "--remove-orphans")
         if ($COMPOSE_CMD.Count -gt 1) {
             & docker compose @composeFiles1 2>$null
@@ -1119,9 +1119,9 @@ function Cmd-Clean {
             & docker-compose @composeFiles1 2>$null
         }
 
-        $composeFiles2 = @("-f", "$SCRIPT_DIR\docker-compose.prod.yml",
-                           "-f", "$SCRIPT_DIR\docker-compose.prod.traefik.yml",
-                           "-f", "$SCRIPT_DIR\docker-compose.monitoring.yml",
+        $composeFiles2 = @("-f", "$SCRIPT_DIR/docker-compose.prod.yml",
+                           "-f", "$SCRIPT_DIR/docker-compose.prod.traefik.yml",
+                           "-f", "$SCRIPT_DIR/docker-compose.monitoring.yml",
                            "down", "--remove-orphans")
         if ($COMPOSE_CMD.Count -gt 1) {
             & docker compose @composeFiles2 2>$null
