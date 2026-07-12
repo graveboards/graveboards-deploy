@@ -258,16 +258,7 @@ function Cleanup-Services {
     }
 }
 
-try {
-    [Console]::Add_CancelKeyPress({
-        if ($script:COMPOSE_PROCESS_PID -and (Get-Process -Id $script:COMPOSE_PROCESS_PID -ErrorAction SilentlyContinue)) {
-            Cleanup-Services
-        }
-        exit 1
-    })
-} catch {
-    # CancelKeyPress may not be available in all PowerShell hosts
-}
+
 
 # =========================
 # Interactive config generation
