@@ -112,6 +112,8 @@ services:
             target: development
         env_file:
             - .env
+        profiles:
+            - frontend
         networks:
             app:
                 aliases:
