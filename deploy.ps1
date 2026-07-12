@@ -1094,27 +1094,25 @@ function Cmd-Clean {
 
     if ($confirm -eq "yes") {
         Write-Info "Removing volumes and images..."
-        $composeFiles1 = @("-f", "$SCRIPT_DIR/docker-compose.yml",
-                           "-f", "$SCRIPT_DIR/docker-compose.test.yml",
-                           "-f", "$SCRIPT_DIR/docker-compose.monitoring.yml",
-                           "down", "-v", "--remove-orphans")
+
+        $composeArgs1 = @("-f", "$SCRIPT_DIR/docker-compose.yml", "-f", "$SCRIPT_DIR/docker-compose.monitoring.yml", "down", "-v", "--remove-orphans")
+        $composeArgs2 = @("-f", "$SCRIPT_DIR/docker-compose.test.yml", "down", "-v", "--remove-orphans")
+        $composeArgs3 = @("-f", "$SCRIPT_DIR/docker-compose.prod.yml", "-f", "$SCRIPT_DIR/docker-compose.prod.traefik.yml", "-f", "$SCRIPT_DIR/docker-compose.monitoring.yml", "down", "--remove-orphans")
+
         if ($COMPOSE_CMD.Count -gt 1) {
-            & docker compose @composeFiles1 2>$null
+            & docker compose @composeArgs1
+            & docker compose @composeArgs2
+            & docker compose @composeArgs3
         } else {
-            & docker-compose @composeFiles1 2>$null
+            & docker-compose @composeArgs1
+            & docker-compose @composeArgs2
+            & docker-compose @composeArgs3
         }
 
-        $composeFiles2 = @("-f", "$SCRIPT_DIR/docker-compose.prod.yml",
-                           "-f", "$SCRIPT_DIR/docker-compose.prod.traefik.yml",
-                           "-f", "$SCRIPT_DIR/docker-compose.monitoring.yml",
-                           "down", "--remove-orphans")
-        if ($COMPOSE_CMD.Count -gt 1) {
-            & docker compose @composeFiles2 2>$null
-        } else {
-            & docker-compose @composeFiles2 2>$null
+        $imageIds = docker images -q graveboards* 2>$null
+        if ($imageIds) {
+            docker rmi -f $imageIds
         }
-
-        $null = docker rmi -f $(docker images -q graveboards* 2>$null) 2>$null
         Write-Success "Cleaned up environment"
     } else {
         Write-Info "Clean aborted"
