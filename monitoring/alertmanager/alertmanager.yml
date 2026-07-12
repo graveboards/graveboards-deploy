@@ -28,6 +28,18 @@ receivers:
       discord_configs:
           - send_resolved: true
             webhook_url: ${ALERTMANAGER_DISCORD_WEBHOOK_URL}
+            title: >-
+              {{ if eq .Status "firing" }}🚨 FIRING{{ else }}✅ RESOLVED{{ end }}: {{ .CommonLabels.alertname }}
+            message: >-
+              {{ if eq .Status "firing" }}🔴{{ else }}🟢{{ end }} **{{ .CommonLabels.severity }}** — {{ if eq .Status "firing" }}Alert Active{{ else }}Alert Resolved{{ end }}
+
+              **Instance:** {{ .CommonLabels.instance }}
+              **Cluster:** {{ .CommonLabels.cluster }}
+              **Environment:** {{ .CommonLabels.environment }}
+
+              {{ range $key, $value := .CommonAnnotations }}
+              **{{ $key }}:** {{ $value }}
+              {{ end }}
 
 inhibit_rules:
     - source_match:
