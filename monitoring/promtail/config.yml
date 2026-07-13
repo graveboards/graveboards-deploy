@@ -45,14 +45,18 @@ scrape_configs:
                   values:
                     - graveboards-postgresql
                     - graveboards-redis
+                    - graveboards-prometheus
+                    - graveboards-grafana
+                    - graveboards-alertmanager
+                    - graveboards-loki
+                    - graveboards-promtail
       relabel_configs:
           # Docker's name filter above substring-matches, so it also picks up
-          # graveboards-redis-exporter; drop it here by compose service label
-          # instead of container name (which carries a leading "/" that broke
-          # the previous name-anchored regex).
+          # graveboards-redis-exporter, graveboards-postgres-exporter, etc;
+          # drop the metrics-only exporters here (they have no useful logs).
           - source_labels:
                 - __meta_docker_container_label_com_docker_compose_service
-            regex: 'redis-exporter'
+            regex: '(?:.*-exporter)'
             action: drop
           - source_labels:
                 - __meta_docker_container_label_com_docker_compose_service
