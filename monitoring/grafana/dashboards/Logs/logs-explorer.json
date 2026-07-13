@@ -303,94 +303,8 @@
       "type": "logs"
     },
     {
-      "collapsed": true,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 31 },
-      "id": 11,
-      "title": "Correlation Helpers",
-      "type": "row"
-    },
-    {
-      "datasource": { "type": "loki", "uid": "${datasource_loki}" },
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "palette-classic" },
-          "custom": {
-            "lineWidth": 1,
-            "pointSize": 4,
-            "showPoints": "auto"
-          }
-        }
-      },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 32 },
-      "id": 12,
-      "targets": [
-        {
-          "expr": "sum(rate({service=\"backend\"} | json | logger=\"app.access\" [5m]))",
-          "legendFormat": "Access log rate",
-          "refId": "A"
-        }
-      ],
-      "title": "HTTP Access Log Rate",
-      "description": "Rate of access log lines. Uses `logger=\"app.access\"` (the JSON field, not `logger_name`).",
-      "type": "timeseries"
-    },
-    {
-      "datasource": { "type": "loki", "uid": "${datasource_loki}" },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 32 },
-      "id": 13,
-      "options": {
-        "dedupStrategy": "none",
-        "enableLogDetails": true,
-        "prettifyLogMessage": true,
-        "showTime": true,
-        "showLabels": false,
-        "showCommonLabels": false,
-        "enableLogDetailsOpenClose": true,
-        "wrapLogMessage": true,
-        "sortOrder": "Descending",
-        "timestampFormat": "2006-01-02 15:04:05"
-      },
-      "targets": [
-        {
-          "expr": "{service=~\"$service\"} | json | request_id=\"$request_id\"",
-          "legendFormat": "",
-          "refId": "A"
-        }
-      ],
-      "title": "Request-ID Trace",
-      "description": "Paste a request ID (or the X-Request-ID response header value from a bug report) to see every log line for that single request.",
-      "type": "logs"
-    },
-    {
-      "datasource": { "type": "loki", "uid": "${datasource_loki}" },
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 40 },
-      "id": 14,
-      "options": {
-        "dedupStrategy": "none",
-        "enableLogDetails": true,
-        "prettifyLogMessage": true,
-        "showTime": true,
-        "showLabels": true,
-        "showCommonLabels": false,
-        "enableLogDetailsOpenClose": true,
-        "wrapLogMessage": true,
-        "sortOrder": "Descending",
-        "timestampFormat": "2006-01-02 15:04:05"
-      },
-      "targets": [
-        {
-          "expr": "{service=~\"postgresql|redis\"} |= \"$search\"",
-          "legendFormat": "",
-          "refId": "A"
-        }
-      ],
-      "title": "Infrastructure Logs (raw)",
-      "description": "Plain-text postgresql/redis container logs. Deliberately not JSON-parsed (they aren't JSON) — kept out of the main Log Stream above so it doesn't show JSONParserErr/unknown-level noise.",
-      "type": "logs"
-    },
-    {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 48 },
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 31 },
       "id": 15,
       "title": "API Requests",
       "type": "row"
@@ -402,7 +316,7 @@
           "color": { "mode": "palette-classic" }
         }
       },
-      "gridPos": { "h": 10, "w": 8, "x": 0, "y": 49 },
+      "gridPos": { "h": 10, "w": 8, "x": 0, "y": 32 },
       "id": 16,
       "options": {
         "orientation": "horizontal",
@@ -427,7 +341,7 @@
     },
     {
       "datasource": { "type": "loki", "uid": "${datasource_loki}" },
-      "gridPos": { "h": 10, "w": 16, "x": 8, "y": 49 },
+      "gridPos": { "h": 10, "w": 16, "x": 8, "y": 32 },
       "id": 17,
       "options": {
         "dedupStrategy": "none",
@@ -450,6 +364,67 @@
       ],
       "title": "API Request Stream",
       "description": "Every app.access line, filtered to just this logger. Expand a row's Log details to see the full parsed request: query_params, body (redacted, JSON/form bodies ≤ 8KB only), user_id, and auth_scheme, alongside the existing method/path/status/duration summary. Filter to one caller with the User ID variable above.",
+      "type": "logs"
+    },
+    {
+      "collapsed": true,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 42 },
+      "id": 18,
+      "title": "Infrastructure & Stack",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "loki", "uid": "${datasource_loki}" },
+      "gridPos": { "h": 12, "w": 12, "x": 0, "y": 43 },
+      "id": 19,
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": true,
+        "showTime": true,
+        "showLabels": true,
+        "showCommonLabels": false,
+        "enableLogDetailsOpenClose": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending",
+        "timestampFormat": "2006-01-02 15:04:05"
+      },
+      "targets": [
+        {
+          "expr": "{service=~\"postgresql|redis\"} |= \"$search\"",
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ],
+      "title": "Infrastructure Logs",
+      "description": "Plain-text postgresql and redis container logs. Deliberately not JSON-parsed (they aren't JSON) — kept separate from the main Log Stream to avoid JSONParserErr/unknown-level noise.",
+      "type": "logs"
+    },
+    {
+      "datasource": { "type": "loki", "uid": "${datasource_loki}" },
+      "gridPos": { "h": 12, "w": 12, "x": 12, "y": 43 },
+      "id": 20,
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": true,
+        "showTime": true,
+        "showLabels": true,
+        "showCommonLabels": false,
+        "enableLogDetailsOpenClose": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending",
+        "timestampFormat": "2006-01-02 15:04:05"
+      },
+      "targets": [
+        {
+          "expr": "{service=~\"prometheus|grafana|alertmanager|loki|promtail\"} |= \"$search\"",
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ],
+      "title": "Monitoring Stack Logs",
+      "description": "stdout/stderr from the observability stack: prometheus, grafana, alertmanager, loki, and promtail. Useful for debugging the monitoring pipeline itself.",
       "type": "logs"
     }
   ],
