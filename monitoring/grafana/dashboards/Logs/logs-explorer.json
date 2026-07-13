@@ -289,8 +289,7 @@
         "enableLogDetailsOpenClose": true,
         "wrapLogMessage": true,
         "sortOrder": "Descending",
-        "timestampFormat": "2006-01-02 15:04:05",
-        "direction": "bottom"
+        "timestampFormat": "2006-01-02 15:04:05"
       },
       "targets": [
         {
@@ -349,8 +348,7 @@
         "enableLogDetailsOpenClose": true,
         "wrapLogMessage": true,
         "sortOrder": "Descending",
-        "timestampFormat": "2006-01-02 15:04:05",
-        "direction": "bottom"
+        "timestampFormat": "2006-01-02 15:04:05"
       },
       "targets": [
         {
@@ -377,8 +375,7 @@
         "enableLogDetailsOpenClose": true,
         "wrapLogMessage": true,
         "sortOrder": "Descending",
-        "timestampFormat": "2006-01-02 15:04:05",
-        "direction": "bottom"
+        "timestampFormat": "2006-01-02 15:04:05"
       },
       "targets": [
         {
@@ -389,6 +386,70 @@
       ],
       "title": "Infrastructure Logs (raw)",
       "description": "Plain-text postgresql/redis container logs. Deliberately not JSON-parsed (they aren't JSON) — kept out of the main Log Stream above so it doesn't show JSONParserErr/unknown-level noise.",
+      "type": "logs"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 48 },
+      "id": 15,
+      "title": "API Requests",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "loki", "uid": "${datasource_loki}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" }
+        }
+      },
+      "gridPos": { "h": 10, "w": 8, "x": 0, "y": 49 },
+      "id": 16,
+      "options": {
+        "orientation": "horizontal",
+        "showThresholdLabels": false,
+        "showThresholdMarkers": false,
+        "reduceOptions": {
+          "calcs": ["sum"],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (auth_scheme) (count_over_time({service=~\"$service\"} | json | logger=\"app.access\" | user_id=~\"$user_id\" [$__range]))",
+          "legendFormat": "{{auth_scheme}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Requests by Auth Type",
+      "description": "Who's calling the API: bearer (JWT user), api_key, or none (guest/unauthenticated). Grouped by the `auth_scheme` JSON field emitted by app.access.",
+      "type": "bargauge"
+    },
+    {
+      "datasource": { "type": "loki", "uid": "${datasource_loki}" },
+      "gridPos": { "h": 10, "w": 16, "x": 8, "y": 49 },
+      "id": 17,
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": true,
+        "showTime": true,
+        "showLabels": false,
+        "showCommonLabels": false,
+        "enableLogDetailsOpenClose": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending",
+        "timestampFormat": "2006-01-02 15:04:05"
+      },
+      "targets": [
+        {
+          "expr": "{service=~\"$service\"} | json | logger=\"app.access\" | user_id=~\"$user_id\" |= \"$search\"",
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ],
+      "title": "API Request Stream",
+      "description": "Every app.access line, filtered to just this logger. Expand a row's Log details to see the full parsed request: query_params, body (redacted, JSON/form bodies ≤ 8KB only), user_id, and auth_scheme, alongside the existing method/path/status/duration summary. Filter to one caller with the User ID variable above.",
       "type": "logs"
     }
   ],
@@ -487,6 +548,17 @@
         "name": "request_id",
         "options": [],
         "query": "",
+        "skipUrlSync": false,
+        "type": "textbox"
+      },
+      {
+        "current": { "selected": false, "text": ".*", "value": ".*" },
+        "hide": 0,
+        "label": "User ID",
+        "description": "Filter app.access lines to one caller. Leave as .* for everyone; an empty auth_scheme=\"none\" request logs user_id as the JSON null (matched as an empty string).",
+        "name": "user_id",
+        "options": [],
+        "query": ".*",
         "skipUrlSync": false,
         "type": "textbox"
       }
