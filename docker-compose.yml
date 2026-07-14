@@ -42,8 +42,10 @@ services:
         environment:
             - REDIS_PASSWORD=${REDIS_PASSWORD:-}
         entrypoint: ["/bin/sh", "/entrypoint/redis-entrypoint.sh"]
+        command: ["/usr/local/etc/redis/redis.conf"]
         volumes:
             - ./redis-entrypoint.sh:/entrypoint/redis-entrypoint.sh:ro
+            - ./redis.conf:/usr/local/etc/redis/redis.conf:ro
             - redis-data:/data
         networks:
             app:
@@ -71,6 +73,7 @@ services:
             context: ../graveboards-backend
             dockerfile: Dockerfile
             target: runner
+        user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
         env_file:
             - .env
         volumes:

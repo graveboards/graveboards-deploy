@@ -445,6 +445,9 @@ REDIS_DB=15
 EOF
 
     # Create .env for deploy orchestrator (only if missing)
+    local HostUid HostGid
+    HostUid=$(id -u)
+    HostGid=$(id -g)
     write_config_file "$SCRIPT_DIR/.env" <<EOF
 # BACKEND
 DEBUG=true
@@ -471,6 +474,10 @@ NEXT_PUBLIC_API_URL=/api/v1
 INTERNAL_API_URL=http://graveboards-backend:8000/api/v1
 SESSION_SECRET=$SESSION_SECRET
 APP_URL=http://localhost:3000
+
+# HOST USER (auto-set — prevents bind-mount permission issues in dev/test)
+HOST_UID=$HostUid
+HOST_GID=$HostGid
 EOF
 
     echo

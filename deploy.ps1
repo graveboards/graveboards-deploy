@@ -489,6 +489,11 @@ REDIS_DB=15
     Write-ConfigFile -Path (Join-Path $BACKEND_DIR ".env.test") -Content $envTestContent
 
     # Create .env for deploy orchestrator
+    $HostUid = & id -u 2>$null
+    if (-not $HostUid -or $HostUid -eq "") { $HostUid = "1000" }
+    $HostGid = & id -g 2>$null
+    if (-not $HostGid -or $HostGid -eq "") { $HostGid = "1000" }
+
     $envDeployContent = @"
 # BACKEND
 DEBUG=true
@@ -515,6 +520,10 @@ NEXT_PUBLIC_API_URL=/api/v1
 INTERNAL_API_URL=http://graveboards-backend:8000/api/v1
 SESSION_SECRET=$SessionSecret
 APP_URL=http://localhost:3000
+
+# HOST USER (auto-set — prevents bind-mount permission issues in dev/test)
+HOST_UID=$HostUid
+HOST_GID=$HostGid
 "@
     Write-ConfigFile -Path (Join-Path $SCRIPT_DIR ".env") -Content $envDeployContent
 

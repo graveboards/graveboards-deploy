@@ -36,8 +36,10 @@ services:
         environment:
             - REDIS_PASSWORD=${REDIS_PASSWORD}
         entrypoint: ["/bin/sh", "/entrypoint/redis-entrypoint.sh"]
+        command: ["/usr/local/etc/redis/redis.conf"]
         volumes:
             - ./redis-entrypoint.sh:/entrypoint/redis-entrypoint.sh:ro
+            - ./redis.conf:/usr/local/etc/redis/redis.conf:ro
             - redis-prod-data:/data
         networks:
             - app
