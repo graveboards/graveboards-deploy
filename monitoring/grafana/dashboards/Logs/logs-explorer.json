@@ -367,15 +367,49 @@
       "type": "logs"
     },
     {
-      "collapsed": true,
+      "collapsed": false,
       "gridPos": { "h": 1, "w": 24, "x": 0, "y": 42 },
+      "id": 21,
+      "title": "Audit",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "loki", "uid": "${datasource_loki}" },
+      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 43 },
+      "id": 22,
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": true,
+        "showTime": true,
+        "showLabels": true,
+        "showCommonLabels": false,
+        "enableLogDetailsOpenClose": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending",
+        "timestampFormat": "2006-01-02 15:04:05"
+      },
+      "targets": [
+        {
+          "expr": "{service=~\"$service\"} | json | logger=~\".*audit.*\" | action=~\"$audit_action\" |= \"$search\"",
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ],
+      "title": "Audit Log Stream",
+      "description": "Audit events from the app. Each row shows the action, user_id, entity_type, entity_id, and ip_address from the structured audit log output. Filter by action with the Audit Action variable.",
+      "type": "logs"
+    },
+    {
+      "collapsed": true,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 55 },
       "id": 18,
       "title": "Infrastructure & Stack",
       "type": "row"
     },
     {
       "datasource": { "type": "loki", "uid": "${datasource_loki}" },
-      "gridPos": { "h": 12, "w": 12, "x": 0, "y": 43 },
+      "gridPos": { "h": 12, "w": 12, "x": 0, "y": 56 },
       "id": 19,
       "options": {
         "dedupStrategy": "none",
@@ -402,7 +436,7 @@
     },
     {
       "datasource": { "type": "loki", "uid": "${datasource_loki}" },
-      "gridPos": { "h": 12, "w": 12, "x": 12, "y": 43 },
+      "gridPos": { "h": 12, "w": 12, "x": 12, "y": 56 },
       "id": 20,
       "options": {
         "dedupStrategy": "none",
@@ -532,6 +566,17 @@
         "label": "User ID",
         "description": "Filter app.access lines to one caller. Leave as .* for everyone; an empty auth_scheme=\"none\" request logs user_id as the JSON null (matched as an empty string).",
         "name": "user_id",
+        "options": [],
+        "query": ".*",
+        "skipUrlSync": false,
+        "type": "textbox"
+      },
+      {
+        "current": { "selected": false, "text": ".*", "value": ".*" },
+        "hide": 0,
+        "label": "Audit Action",
+        "description": "Filter audit logs by action (e.g., login_success, login_failure, api_key_generated). Leave as .* for all audit events.",
+        "name": "audit_action",
         "options": [],
         "query": ".*",
         "skipUrlSync": false,
