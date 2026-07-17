@@ -161,7 +161,7 @@ services:
             - "--path.rootfs=/host"
             - "--web.listen-address=0.0.0.0:9100"
         volumes:
-            - /:/host:ro,rslave
+            - /:/host:ro
         networks:
             - app
         restart: unless-stopped
