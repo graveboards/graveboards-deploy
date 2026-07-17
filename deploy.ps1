@@ -53,7 +53,7 @@ function Invoke-GrafanaAnnotation {
     $grafanaToken = $env:GRAFANA_DEPLOY_ANNOTATION_TOKEN
 
     if (-not $grafanaToken) {
-        Write-Info "GRAFANA_DEPLOY_ANNOTATION_TOKEN not set — skipping Grafana annotation."
+        Write-Info "GRAFANA_DEPLOY_ANNOTATION_TOKEN not set - skipping Grafana annotation."
         return
     }
 
@@ -280,7 +280,7 @@ function Cleanup-Services {
 # =========================
 
 # Config files this script manages. A file is only ever (re)generated when it is
-# missing or empty — an existing, non-empty file is ALWAYS preserved, so running
+# missing or empty - an existing, non-empty file is ALWAYS preserved, so running
 # against a populated repo (e.g. a configured production .env) never destroys it.
 function Get-ConfigTargets {
     return @(
@@ -325,7 +325,7 @@ function Generate-ConfigFiles {
     $script:CreatedFiles = @()
     $script:SkippedFiles = @()
 
-    Write-Info "Missing configuration detected — starting interactive setup."
+    Write-Info "Missing configuration detected - starting interactive setup."
     Write-Info "Existing, non-empty files are preserved; only the gaps are filled."
     Write-Host ""
 
@@ -536,7 +536,7 @@ INTERNAL_API_URL=http://graveboards-backend:8000/api/v1
 SESSION_SECRET=$SessionSecret
 APP_URL=http://localhost:3000
 
-# HOST USER (auto-set — prevents bind-mount permission issues in dev/test)
+# HOST USER (auto-set - prevents bind-mount permission issues in dev/test)
 HOST_UID=$HostUid
 HOST_GID=$HostGid
 "@
@@ -548,7 +548,7 @@ HOST_GID=$HostGid
         foreach ($f in $script:CreatedFiles) { Write-Host "  + $f" }
     }
     if ($script:SkippedFiles.Count -gt 0) {
-        Write-Info "Preserved $($script:SkippedFiles.Count) existing file(s) — left untouched:"
+        Write-Info "Preserved $($script:SkippedFiles.Count) existing file(s) - left untouched:"
         foreach ($f in $script:SkippedFiles) { Write-Host "  = $f" }
     }
     Write-Host ""
