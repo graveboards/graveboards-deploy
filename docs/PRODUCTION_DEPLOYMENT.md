@@ -195,10 +195,10 @@ The Traefik configuration provides:
 
 ### Docker Multi-Stage Build
 
-The frontend uses a single multi-stage Dockerfile:
+The frontend Dockerfile has four stages: `deps`, `builder`, `development`, and `production`. Only the last two are used as build targets:
 
-- **development stage** - Full dev environment with hot-reload (`npm run dev`)
-- **production stage** - Optimized for production with standalone output
+- **development** - Full Node.js environment with hot-reload (`npm run dev`)
+- **production** - Optimized for production with standalone output (`next start`)
 
 Build targets are automatically selected based on mode:
 - Dev mode: `--target development`

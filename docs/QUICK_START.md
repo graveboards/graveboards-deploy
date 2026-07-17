@@ -57,10 +57,17 @@ curl http://localhost:3000
 ./deploy.sh down
 
 # View logs
-./deploy.sh logs [dev|prod|test] [backend|frontend|postgresql|redis|all]
+./deploy.sh logs [dev|prod|test] [--no-monitoring] [--nas] [--traefik] [--monitoring-traefik] [--no-frontend] [backend|frontend|postgresql|redis|all]
 
-# Restart
-./deploy.sh up dev
+# Full deploy pipeline (down + pull + build + up)
+./deploy.sh deploy dev
+
+# Pull/rebuild repos
+./deploy.sh pull all
+./deploy.sh force-pull all
+
+# Show help
+./deploy.sh help
 ```
 
 ### 6. Run Tests
