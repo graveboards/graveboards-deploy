@@ -9,9 +9,9 @@ services:
         ports:
             - "5432:5432"
         environment:
-            - POSTGRES_USERNAME=${POSTGRESQL_USERNAME:-postgres}
+            - POSTGRES_USER=${POSTGRESQL_USERNAME:-postgres}
             - POSTGRES_PASSWORD=${POSTGRESQL_PASSWORD:-postgres}
-            - POSTGRES_DATABASE=${POSTGRESQL_DATABASE:-graveboards_test}
+            - POSTGRES_DB=${POSTGRESQL_DATABASE:-graveboards_test}
             - POSTGRES_INITDB_ARGS=--auth-host=scram-sha-256
         volumes:
             - postgresql-test-data:/var/lib/postgresql/data
@@ -19,7 +19,7 @@ services:
         networks:
             - app
         healthcheck:
-            test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USERNAME:-postgres}" ]
+            test: [ "CMD-SHELL", "pg_isready -U ${POSTGRESQL_USERNAME:-postgres}" ]
             interval: 10s
             timeout: 5s
             retries: 5
