@@ -1,0 +1,8 @@
+# Graveboards Production - Monitoring Override
+# Swaps the dev prometheus config for the prod variant.
+# Usage: docker compose -f docker-compose.prod.yml -f docker-compose.monitoring.yml -f docker-compose.monitoring.prod.yml up -d
+
+services:
+    prometheus:
+        volumes:
+            - ./monitoring/prometheus/prometheus.prod.yml:/etc/prometheus/prometheus.yml:ro
