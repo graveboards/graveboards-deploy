@@ -85,14 +85,17 @@ Access internal monitoring services via Grafana datasources or `ssh -L` tunnels.
 
 ```bash
 cd graveboards-deploy
-./deploy.sh up [mode] [--no-monitoring] [--nas] [--traefik] [--monitoring-ports]  # Start services
-./deploy.sh down [mode] [--no-monitoring] [--nas] [--traefik] [service...]              # Stop services
-./deploy.sh logs [mode] [--no-monitoring] [--nas] [--traefik] [service] - View logs
-./deploy.sh test                                                    # Run tests
-./deploy.sh build [mode] [--no-monitoring] [--nas] [--traefik] [service...]             # Build images
-./deploy.sh status                                                  # Show status
-./deploy.sh clean                                                   # Remove volumes and images
-./deploy.sh help                                                    # Show help
+./deploy.sh up [mode] [--build] [--no-monitoring] [--nas] [--traefik] [--monitoring-ports] [--monitoring-traefik] [--no-frontend] [service...]  # Start services
+./deploy.sh down [mode] [--no-monitoring] [--nas] [--traefik] [--monitoring-traefik] [--no-frontend] [service...]              # Stop services
+./deploy.sh build [mode] [--no-monitoring] [--nas] [--traefik] [--no-frontend] [service...]             # Build images
+./deploy.sh deploy [mode] [--follow|-f] [--no-monitoring] [--nas] [--traefik] [--monitoring-traefik] [--no-frontend]  # Full pipeline: down + pull + build + up
+./deploy.sh pull [repo...]                        # Git pull repositories (all, backend, frontend, deploy)
+./deploy.sh force-pull [repo...]                  # Force reset repositories to origin
+./deploy.sh logs [mode] [--no-monitoring] [--nas] [--traefik] [--monitoring-traefik] [--no-frontend] [service]  # View logs
+./deploy.sh test [--log-file <path>] [--no-cleanup] [--no-log] [--quiet]  # Run tests
+./deploy.sh status                                  # Show status
+./deploy.sh clean                                   # Remove volumes and images
+./deploy.sh help                                    # Show help
 ```
 
 **Modes:**
@@ -101,24 +104,43 @@ cd graveboards-deploy
 - `test`     - Testing (isolated DB/Redis, runs pytest, no monitoring)
 
 **Flags:**
+- `--build` - Rebuild images before starting (up only)
 - `--no-monitoring` - Skip the monitoring stack
 - `--nas`           - Include NAS volume overrides (prod only)
 - `--traefik`       - Include Traefik overrides for frontend + Grafana (prod only, requires traefik-proxy network)
 - `--monitoring-ports` - Publish monitoring ports to host (dev only, for local access)
 - `--monitoring-traefik` - Include Traefik routes for monitoring services (prod only)
+- `--no-frontend` - Exclude frontend service
 
-**Services (for logs):**
+**Services (for up/down/build/logs):**
 - `all` - All services (default)
 - `backend` - Backend service
 - `frontend` - Frontend service
-- `postgres` - PostgreSQL database
+- `postgres` / `postgresql` - PostgreSQL database
 - `redis` - Redis cache
 
 ---
 
+## Docker Compose Files
+
+**Base files:**
+- `docker-compose.yml` - Development stack (Postgres, Redis, Backend, Frontend)
+- `docker-compose.prod.yml` - Production stack (named volumes, no host ports)
+- `docker-compose.test.yml` - Test stack (isolated DB/Redis, runs pytest)
+
+**Override files (composed on top of base files):**
+- `docker-compose.monitoring.yml` - Adds Prometheus, Grafana, Alertmanager, Loki, Promtail, and exporters
+- `docker-compose.monitoring.prod.yml` - Swaps Prometheus config for the production variant
+- `docker-compose.monitoring.ports.yml` - Publishes monitoring ports to host (dev only)
+- `docker-compose.monitoring.traefik.yml` - Adds Traefik routes for Prometheus/Alertmanager (Model B exposure, requires `TRAEFIK_BASIC_AUTH_*` env vars)
+- `docker-compose.prod.nas.yml` - Overrides prod volumes with NAS/external paths
+- `docker-compose.prod.traefik.yml` - Adds Traefik labels for frontend + Grafana with TLS
+
+The `deploy.sh` script composes these automatically based on mode and flags.
+
 ## Docker Build
 
-This project uses a multi-stage Dockerfile with separate stages for development and production:
+The frontend Dockerfile has four stages: `deps`, `builder`, `development`, and `production`. Only `development` and `production` are used as build targets.
 
 - **development** - Full Node.js environment with hot-reload support (`npm run dev`)
 - **production** - Optimized image with standalone output (`next start`)
@@ -202,7 +224,7 @@ docker compose -f docker-compose.yml exec backend curl -s http://localhost:8000/
 ### Logs
 
 ```bash
-./deploy.sh logs [mode] [--no-monitoring] [service]
+./deploy.sh logs [mode] [--no-monitoring] [--nas] [--traefik] [--monitoring-traefik] [--no-frontend] [service]
 ```
 
 **Examples:**
@@ -239,9 +261,9 @@ and `loki-data` volumes separately.
 ### Environment Validation
 
 ```bash
-./env-validator.sh              # Validate environment configuration
-                                # Requires GRAFANA_ADMIN_PASSWORD (non-default)
-                                # and ALERTMANAGER_DISCORD_WEBHOOK_URL in prod
+./env-validator.sh              # Validate environment, compose files, backend, frontend, and Docker
+                                # Checks required/optional variables, NAS config, monitoring secrets (prod),
+                                # and verifies compose file existence
 ```
 
 ---
