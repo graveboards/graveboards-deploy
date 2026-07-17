@@ -143,6 +143,10 @@ function Build-ComposeArgs {
         }
     }
 
+    if ($Mode -eq "prod" -and $NoMonitoring -ne "true") {
+        $composeFiles += "-f", "$SCRIPT_DIR/docker-compose.monitoring.prod.yml"
+    }
+
     if ($NoFrontend -ne "true") {
         $composeFiles += "--profile", "frontend"
     }
@@ -900,6 +904,9 @@ function Cmd-Deploy {
             if ($monitoringTraefik -eq "true") {
                 $composeFiles += "-f", "$SCRIPT_DIR/docker-compose.monitoring.traefik.yml"
             }
+        }
+        if ($mode -eq "prod") {
+            $composeFiles += "-f", "$SCRIPT_DIR/docker-compose.monitoring.prod.yml"
         }
         if ($COMPOSE_CMD.Count -gt 1) {
             $script:COMPOSE_PROCESS_PID = (Start-Process -FilePath $COMPOSE_CMD[0] -ArgumentList (@("compose") + $composeFiles + @("up", "--build")) -NoNewWindow -PassThru).Id

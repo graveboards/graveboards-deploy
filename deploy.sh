@@ -114,7 +114,6 @@ compose() {
             if [[ "$traefik" == "true" ]]; then
                 compose_files+=("-f" "$SCRIPT_DIR/docker-compose.prod.traefik.yml")
             fi
-            compose_files+=("-f" "$SCRIPT_DIR/docker-compose.monitoring.prod.yml")
             ;;
         test)
             compose_files=("-f" "$SCRIPT_DIR/docker-compose.test.yml")
@@ -133,6 +132,10 @@ compose() {
         if [[ "$monitoringTraefik" == "true" ]]; then
             compose_files+=("-f" "$SCRIPT_DIR/docker-compose.monitoring.traefik.yml")
         fi
+    fi
+
+    if [[ "$mode" == "prod" ]] && [[ "$noMonitoring" != "true" ]]; then
+        compose_files+=("-f" "$SCRIPT_DIR/docker-compose.monitoring.prod.yml")
     fi
 
     if [[ "$noFrontend" != "true" ]]; then
