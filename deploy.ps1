@@ -163,6 +163,17 @@ function Invoke-Compose {
 
     $composeFiles = Build-ComposeArgs -Mode $Mode -NoMonitoring $NoMonitoring -Nas $Nas -Traefik $Traefik -MonitoringTraefik $MonitoringTraefik -NoFrontend $NoFrontend
 
+    # Picked up by docker-compose.yml/docker-compose.prod.yml as the backend
+    # build arg GIT_COMMIT, since the image itself has no .git to introspect.
+    # Re-resolved on every call so it reflects the checkout after Git-PullRepo.
+    Push-Location $BACKEND_DIR
+    try {
+        $commit = git rev-parse --short HEAD 2>$null
+        $env:GIT_COMMIT = if ($LASTEXITCODE -eq 0 -and $commit) { $commit } else { "unknown" }
+    } finally {
+        Pop-Location
+    }
+
     $fullArgs = $composeFiles + $ExtraArgs
 
     if ($COMPOSE_CMD.Count -gt 1) {

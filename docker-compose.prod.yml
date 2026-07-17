@@ -64,6 +64,8 @@ services:
             context: ../graveboards-backend
             dockerfile: Dockerfile
             target: runner
+            args:
+                GIT_COMMIT: ${GIT_COMMIT:-unknown}
         env_file:
             - .env
         volumes:

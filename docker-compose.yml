@@ -72,6 +72,8 @@ services:
             context: ../graveboards-backend
             dockerfile: Dockerfile
             target: runner
+            args:
+                GIT_COMMIT: ${GIT_COMMIT:-unknown}
         user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
         env_file:
             - .env

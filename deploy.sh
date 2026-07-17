@@ -97,6 +97,11 @@ compose() {
     shift 6
     local compose_files=()
 
+    # Picked up by docker-compose.yml/docker-compose.prod.yml as the backend
+    # build arg GIT_COMMIT, since the image itself has no .git to introspect.
+    # Re-resolved on every call so it reflects the checkout after `cmd_pull`.
+    export GIT_COMMIT="$(cd "$BACKEND_DIR" 2>/dev/null && git rev-parse --short HEAD 2>/dev/null || echo unknown)"
+
     case "$mode" in
         dev)
             compose_files=("-f" "$SCRIPT_DIR/docker-compose.yml")
