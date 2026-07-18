@@ -5,7 +5,7 @@
         "builtIn": 0,
         "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
         "enable": true,
-        "expr": "ALERTS{alertstate=\"firing\"}",
+        "expr": "count(ALERTS{alertstate=\"firing\"}) > 0",
         "hide": false,
         "iconColor": "red",
         "name": "Firing Alerts",
@@ -67,6 +67,7 @@
         }
       ],
       "title": "Redis Up",
+      "description": "Whether Redis is reachable by the exporter. 1 = up, 0 = down.",
       "type": "stat"
     },
     {
@@ -138,6 +139,7 @@
         }
       ],
       "title": "Connected Clients",
+      "description": "Number of currently connected Redis clients.",
       "type": "stat"
     },
     {
@@ -173,7 +175,7 @@
         }
       ],
       "title": "Server Cache Hit Ratio",
-      "description": "Redis server-side cache hit ratio. Green >95%, amber >90%, red <90%.",
+      "description": "Redis server-side cache hit ratio (hits / hits+misses). Green >95%, amber 90-95%, red <90%.",
       "type": "stat"
     },
     {
@@ -214,6 +216,7 @@
         }
       ],
       "title": "Ops / sec",
+      "description": "Rate of Redis commands processed, in commands per second.",
       "type": "timeseries"
     },
     {
@@ -253,6 +256,7 @@
         }
       ],
       "title": "Memory Over Time",
+      "description": "Redis memory usage in bytes over time. Compare against host memory (Host / System dashboard) for context.",
       "type": "timeseries"
     },
     {
@@ -290,12 +294,91 @@
         }
       ],
       "title": "Evictions & Expirations",
-      "description": "Evictions are the classic Redis incident signal.",
+      "description": "Rate of evicted keys (forced out due to memory pressure — the key Redis incident signal) and expired keys (TTL-based expiry). Any sustained eviction rate indicates memory is too low.",
       "type": "timeseries"
     },
     {
       "collapsed": false,
       "gridPos": { "h": 1, "w": 24, "x": 0, "y": 14 },
+      "id": 24,
+      "title": "Keyspace & Reloads",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "lineWidth": 1,
+            "pointSize": 4,
+            "showPoints": "auto"
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 15 },
+      "id": 25,
+      "links": [
+        {
+          "title": "View Logs",
+          "url": "/d/graveboards-logs?var-logger=app.redis&from=${__from}&to=${__to}",
+          "targetBlank": false,
+          "type": "link"
+        }
+      ],
+      "targets": [
+        {
+          "expr": "redis_db_keys",
+          "legendFormat": "db{{db}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Keyspace by DB",
+      "description": "Key counts per logical DB. Type-level breakdown requires --check-keys exporter flag.",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "lineWidth": 1,
+            "pointSize": 4,
+            "showPoints": "auto"
+          }
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 15 },
+      "id": 26,
+      "links": [
+        {
+          "title": "View Logs",
+          "url": "/d/graveboards-logs?var-logger=app.redis&from=${__from}&to=${__to}",
+          "targetBlank": false,
+          "type": "link"
+        }
+      ],
+      "targets": [
+        {
+          "expr": "changes(redis_rdb_last_save_timestamp_seconds[1h])",
+          "legendFormat": "RDB saves/hour",
+          "refId": "A"
+        },
+        {
+          "expr": "redis_uptime_in_seconds",
+          "legendFormat": "Uptime",
+          "refId": "B"
+        }
+      ],
+      "title": "Server Reloads & Uptime",
+      "description": "RDB save frequency and Redis uptime. Uptime resets flag unexpected Redis restarts, which redis_up alone won't catch if restart happens between scrapes.",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 22 },
       "id": 10,
       "title": "App Command Metrics",
       "type": "row"
@@ -313,7 +396,7 @@
           "unit": "ops"
         }
       },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 15 },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 23 },
       "id": 11,
       "links": [
         {
@@ -331,6 +414,7 @@
         }
       ],
       "title": "Command Throughput by Type",
+      "description": "Rate of Redis commands grouped by type (GET, SET, HSET, etc.), in commands per second.",
       "type": "timeseries"
     },
     {
@@ -346,7 +430,7 @@
           "unit": "s"
         }
       },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 15 },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 23 },
       "id": 12,
       "links": [
         {
@@ -369,11 +453,12 @@
         }
       ],
       "title": "Command Latency p95 / p50 by Type",
+      "description": "95th and 50th percentile command execution time by type. Spikes indicate Redis is struggling to keep up.",
       "type": "timeseries"
     },
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 23 },
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 31 },
       "id": 13,
       "title": "App Cache Effectiveness",
       "type": "row"
@@ -394,7 +479,7 @@
           "unit": "percent"
         }
       },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 32 },
       "id": 14,
       "links": [
         {
@@ -434,7 +519,7 @@
           }
         }
       },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 32 },
       "id": 15,
       "links": [
         {
@@ -457,6 +542,7 @@
         }
       ],
       "title": "Cache Hits vs Misses",
+      "description": "Application-level cache hits and misses rate. Complements the App Cache Hit Rate stat above — watch for rising misses which indicate cache stress or a cold cache after restart.",
       "type": "timeseries"
     }
   ],
@@ -501,5 +587,5 @@
   "timezone": "",
   "title": "Redis",
   "uid": "graveboards-redis",
-  "version": 1
+  "version": 2
 }

@@ -5,13 +5,26 @@
         "builtIn": 0,
         "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
         "enable": true,
-        "expr": "ALERTS{alertstate=\"firing\"}",
+        "expr": "count(ALERTS{alertstate=\"firing\"}) > 0",
         "hide": false,
         "iconColor": "red",
         "name": "Firing Alerts",
         "showIn": 0,
         "textFormat": "{{alertname}}",
         "titleFormat": "Firing Alerts",
+        "type": "tags"
+      },
+      {
+        "builtIn": 0,
+        "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+        "enable": true,
+        "expr": "changes(graveboards_build_info[1m]) > 0",
+        "hide": false,
+        "iconColor": "blue",
+        "name": "Deploys",
+        "showIn": 0,
+        "textFormat": "Deploy {{version}}",
+        "titleFormat": "Deploy",
         "type": "tags"
       }
     ]
@@ -61,7 +74,7 @@
           "unit": "bool_on_off"
         }
       },
-      "gridPos": { "h": 4, "w": 24, "x": 0, "y": 1 },
+      "gridPos": { "h": 4, "w": 20, "x": 0, "y": 1 },
       "id": 2,
       "options": {
         "reduceOptions": {
@@ -78,7 +91,7 @@
         }
       ],
       "title": "Service Health",
-      "description": "Scrape target health. Green = up, red = down.",
+      "description": "Scrape target health for graveboards-backend, postgres, redis, node-exporter, prometheus, and alertmanager. Green = up, red = down.",
       "type": "stat"
     },
     {
@@ -104,7 +117,7 @@
           "unit": "short"
         }
       },
-      "gridPos": { "h": 4, "w": 8, "x": 0, "y": 6 },
+      "gridPos": { "h": 4, "w": 12, "x": 0, "y": 6 },
       "id": 4,
       "options": {
         "reduceOptions": {
@@ -126,7 +139,36 @@
     },
     {
       "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-      "gridPos": { "h": 4, "w": 16, "x": 8, "y": 6 },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "unit": "string"
+        }
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 1 },
+      "id": 24,
+      "options": {
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "name"
+      },
+      "targets": [
+        {
+          "expr": "graveboards_build_info",
+          "legendFormat": "{{version}} ({{commit}})",
+          "refId": "A"
+        }
+      ],
+      "title": "Version",
+      "description": "Currently deployed version and commit hash.",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+      "gridPos": { "h": 4, "w": 12, "x": 12, "y": 6 },
       "id": 5,
       "options": {
         "alertInstanceLabelFilter": "",
@@ -153,6 +195,7 @@
         }
       ],
       "title": "Alert List",
+      "description": "All active alerts from Prometheus. Includes firing, pending, error, and normal states.",
       "type": "alertlist"
     },
     {
@@ -178,7 +221,7 @@
           "unit": "reqps"
         }
       },
-      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 11 },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 11 },
       "id": 7,
       "options": {
         "reduceOptions": {
@@ -196,6 +239,14 @@
       ],
       "title": "Request Rate",
       "description": "Requests per second over the last 5 minutes.",
+      "links": [
+        {
+          "title": "View API & Requests",
+          "url": "/d/graveboards-api?from=${__from}&to=${__to}",
+          "targetBlank": false,
+          "type": "link"
+        }
+      ],
       "type": "stat"
     },
     {
@@ -214,7 +265,7 @@
           "unit": "percent"
         }
       },
-      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 11 },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 11 },
       "id": 8,
       "options": {
         "reduceOptions": {
@@ -223,6 +274,14 @@
           "values": false
         }
       },
+      "links": [
+        {
+          "title": "View API & Requests",
+          "url": "/d/graveboards-api?from=${__from}&to=${__to}",
+          "targetBlank": false,
+          "type": "link"
+        }
+      ],
       "targets": [
         {
           "expr": "job:http_requests_errors:ratio5m * 100",
@@ -250,7 +309,7 @@
           "unit": "s"
         }
       },
-      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 11 },
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 11 },
       "id": 9,
       "options": {
         "reduceOptions": {
@@ -259,6 +318,14 @@
           "values": false
         }
       },
+      "links": [
+        {
+          "title": "View API & Requests",
+          "url": "/d/graveboards-api?from=${__from}&to=${__to}",
+          "targetBlank": false,
+          "type": "link"
+        }
+      ],
       "targets": [
         {
           "expr": "job:http_request_duration:p95_5m",
@@ -278,7 +345,7 @@
           "unit": "short"
         }
       },
-      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 11 },
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 11 },
       "id": 10,
       "options": {
         "reduceOptions": {
@@ -287,6 +354,14 @@
           "values": false
         }
       },
+      "links": [
+        {
+          "title": "View API & Requests",
+          "url": "/d/graveboards-api?from=${__from}&to=${__to}",
+          "targetBlank": false,
+          "type": "link"
+        }
+      ],
       "targets": [
         {
           "expr": "sum(http_requests_in_flight)",
@@ -295,7 +370,7 @@
         }
       ],
       "title": "In-Flight",
-      "description": "Currently in-flight requests.",
+      "description": "Total in-flight HTTP requests across all backend instances right now.",
       "type": "stat"
     },
     {
@@ -314,7 +389,7 @@
           "unit": "percent"
         }
       },
-      "gridPos": { "h": 4, "w": 4, "x": 16, "y": 11 },
+      "gridPos": { "h": 4, "w": 8, "x": 0, "y": 15 },
       "id": 11,
       "options": {
         "reduceOptions": {
@@ -323,6 +398,14 @@
           "values": false
         }
       },
+      "links": [
+        {
+          "title": "View osu! API",
+          "url": "/d/graveboards-osu-api?from=${__from}&to=${__to}",
+          "targetBlank": false,
+          "type": "link"
+        }
+      ],
       "targets": [
         {
           "expr": "sum(rate(osu_api_requests_total{status_code=~\"5..\"}[5m])) / sum(rate(osu_api_requests_total[5m])) * 100",
@@ -349,8 +432,52 @@
           "unit": "short"
         }
       },
-      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 11 },
+      "gridPos": { "h": 4, "w": 8, "x": 8, "y": 15 },
       "id": 12,
+      "options": {
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        }
+      },
+      "links": [
+        {
+          "title": "View Background Jobs",
+          "url": "/d/graveboards-jobs?from=${__from}&to=${__to}",
+          "targetBlank": false,
+          "type": "link"
+        }
+      ],
+      "targets": [
+        {
+          "expr": "sum(daemon_service_running)",
+          "legendFormat": "Running",
+          "refId": "A"
+        }
+      ],
+      "title": "Daemon Services",
+      "description": "Running daemon services count. Green = all 5 running, red = fewer than 5. Thresholds: red when below 5.",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "amber", "value": 3 },
+              { "color": "red", "value": 5 }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 4, "w": 8, "x": 16, "y": 15 },
+      "id": 25,
       "options": {
         "reduceOptions": {
           "calcs": ["lastNotNull"],
@@ -360,18 +487,18 @@
       },
       "targets": [
         {
-          "expr": "sum(daemon_service_running)",
-          "legendFormat": "Running",
+          "expr": "count(count by (error_type) (errors_total))",
+          "legendFormat": "Error Types",
           "refId": "A"
         }
       ],
-      "title": "Daemon Services",
-      "description": "Number of daemon services currently running (out of 5).",
+      "title": "Error Types",
+      "description": "Distinct error_type values currently present in errors_total. Amber >3 types, red >5. A sudden increase signals a new failure mode.",
       "type": "stat"
     },
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 15 },
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 19 },
       "id": 13,
       "title": "Subsystem Overview",
       "type": "row"
@@ -383,7 +510,7 @@
           "color": { "mode": "thresholds" }
         }
       },
-      "gridPos": { "h": 6, "w": 8, "x": 0, "y": 16 },
+      "gridPos": { "h": 6, "w": 8, "x": 0, "y": 20 },
       "id": 14,
       "links": [
         {
@@ -406,6 +533,7 @@
         }
       ],
       "title": "API Traffic",
+      "description": "Request rate and 5xx error percentage over time for the backend API.",
       "type": "timeseries"
     },
     {
@@ -415,7 +543,7 @@
           "color": { "mode": "thresholds" }
         }
       },
-      "gridPos": { "h": 6, "w": 8, "x": 8, "y": 16 },
+      "gridPos": { "h": 6, "w": 8, "x": 8, "y": 20 },
       "id": 15,
       "links": [
         {
@@ -438,6 +566,7 @@
         }
       ],
       "title": "Infrastructure",
+      "description": "Host-level CPU utilization and memory usage percentages.",
       "type": "timeseries"
     },
     {
@@ -447,7 +576,7 @@
           "color": { "mode": "thresholds" }
         }
       },
-      "gridPos": { "h": 6, "w": 8, "x": 16, "y": 16 },
+      "gridPos": { "h": 6, "w": 8, "x": 16, "y": 20 },
       "id": 16,
       "links": [
         {
@@ -470,11 +599,12 @@
         }
       ],
       "title": "Data Stores",
+      "description": "PostgreSQL connection usage (% of max_connections) and Redis memory usage (% of max memory).",
       "type": "timeseries"
     },
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 22 },
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 26 },
       "id": 17,
       "title": "Recent Errors",
       "type": "row"
@@ -486,7 +616,7 @@
           "color": { "mode": "thresholds" }
         }
       },
-      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 23 },
+      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 27 },
       "id": 18,
       "links": [
         {
@@ -549,5 +679,5 @@
   "timezone": "",
   "title": "Platform Overview",
   "uid": "graveboards-overview",
-  "version": 1
+  "version": 2
 }

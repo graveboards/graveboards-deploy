@@ -5,7 +5,7 @@
         "builtIn": 0,
         "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
         "enable": true,
-        "expr": "ALERTS{alertstate=\"firing\"}",
+        "expr": "count(ALERTS{alertstate=\"firing\"}) > 0",
         "hide": false,
         "iconColor": "red",
         "name": "Firing Alerts",
@@ -67,6 +67,7 @@
         }
       ],
       "title": "PostgreSQL Up",
+      "description": "Whether PostgreSQL is reachable by the exporter. 1 = up, 0 = down.",
       "type": "stat"
     },
     {
@@ -124,12 +125,13 @@
       },
       "targets": [
         {
-          "expr": "pg_database_size_bytes{datname=\"graveboards_dev\"}",
+          "expr": "pg_database_size_bytes{datname=\"$datname\"}",
           "legendFormat": "DB Size",
           "refId": "A"
         }
       ],
       "title": "Database Size",
+      "description": "Total size of the selected database in bytes.",
       "type": "stat"
     },
     {
@@ -157,6 +159,7 @@
         }
       ],
       "title": "Transactions / sec",
+      "description": "Total transactions per second (commits + rollbacks).",
       "type": "stat"
     },
     {
@@ -225,6 +228,7 @@
         }
       ],
       "title": "Pool Utilization Over Time",
+      "description": "Application-side connection pool: checked out (in use), checked in (idle), pool size (max), and overflow (requests waiting for a connection). Overflow >0 means the pool is saturated.",
       "type": "timeseries"
     },
     {
@@ -257,6 +261,7 @@
         }
       ],
       "title": "Server Connections by State",
+      "description": "PostgreSQL connections grouped by state (active, idle, idle in transaction, etc.). A buildup of 'idle in transaction' indicates leaked transactions.",
       "type": "timeseries"
     },
     {
@@ -279,7 +284,7 @@
           "unit": "s"
         }
       },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 15 },
+      "gridPos": { "h": 10, "w": 12, "x": 0, "y": 15 },
       "id": 10,
       "links": [
         {
@@ -297,6 +302,7 @@
         }
       ],
       "title": "Query Duration p95 by Type",
+      "description": "95th percentile query execution time by type (e.g., SELECT, INSERT, UPDATE). Spikes indicate slow queries.",
       "type": "timeseries"
     },
     {
@@ -366,6 +372,7 @@
         }
       ],
       "title": "Query Latency Heatmap",
+      "description": "Full distribution of query latencies. Darker = more queries at that duration. Useful for spotting tail latency that p95 alone might miss.",
       "type": "heatmap"
     },
     {
@@ -416,7 +423,7 @@
         }
       ],
       "title": "Cache Hit Ratio",
-      "description": "Block cache hit ratio. Green >95%, amber >90%, red <90%.",
+      "description": "PostgreSQL block cache hit ratio (shared blocks found in cache / total shared blocks accessed). Green >95%, amber 90-95%, red <90%.",
       "type": "stat"
     },
     {
@@ -454,6 +461,7 @@
         }
       ],
       "title": "Commits vs Rollbacks",
+      "description": "Rate of committed vs rolled-back transactions. A rising rollback rate indicates application errors or constraint violations.",
       "type": "timeseries"
     },
     {
@@ -491,6 +499,91 @@
         }
       ],
       "title": "Locks / Deadlocks",
+      "description": "Active lock count and deadlock rate. Any deadlocks/s >0 is an incident — indicates conflicting queries hitting the same rows.",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 34 },
+      "id": 26,
+      "title": "Temp Files & Vacuum",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "lineWidth": 1,
+            "pointSize": 4,
+            "showPoints": "auto"
+          },
+          "unit": "bytes"
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 35 },
+      "id": 27,
+      "links": [
+        {
+          "title": "View Logs",
+          "url": "/d/graveboards-logs?var-logger=app.database&from=${__from}&to=${__to}",
+          "targetBlank": false,
+          "type": "link"
+        }
+      ],
+      "targets": [
+        {
+          "expr": "rate(pg_stat_database_temp_bytes[5m])",
+          "legendFormat": "temp bytes/s",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(pg_stat_database_temp_files[5m])",
+          "legendFormat": "temp files/s",
+          "refId": "B"
+        }
+      ],
+      "title": "Temp File Usage",
+      "description": "Temp files and bytes written to disk. Indicates work_mem pressure — sorts or hashes spilling past the in-memory limit. A spike suggests query tuning or work_mem increase needed.",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "lineWidth": 1,
+            "pointSize": 4,
+            "showPoints": "auto"
+          }
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 35 },
+      "id": 28,
+      "links": [
+        {
+          "title": "View Logs",
+          "url": "/d/graveboards-logs?var-logger=app.database&from=${__from}&to=${__to}",
+          "targetBlank": false,
+          "type": "link"
+        }
+      ],
+      "targets": [
+        {
+          "expr": "rate(pg_stat_database_deadlocks[5m])",
+          "legendFormat": "deadlocks/s",
+          "refId": "A"
+        },
+        {
+          "expr": "pg_locks_count",
+          "legendFormat": "locks",
+          "refId": "B"
+        }
+      ],
+      "title": "Locks / Deadlocks (detailed)",
+      "description": "Same metrics as the overview panel, shown here for convenience alongside Temp File Usage. Any deadlocks/s >0 indicates conflicting queries.",
       "type": "timeseries"
     }
   ],
@@ -527,6 +620,19 @@
         "regex": "",
         "skipUrlSync": false,
         "type": "datasource"
+      },
+      {
+        "current": { "selected": false, "text": "graveboards_prod", "value": "graveboards_prod" },
+        "hide": 0,
+        "includeAll": false,
+        "label": "Database",
+        "name": "datname",
+        "options": [],
+        "query": "label_values(pg_database_size_bytes, datname)",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "query"
       }
     ]
   },
@@ -535,5 +641,5 @@
   "timezone": "",
   "title": "PostgreSQL",
   "uid": "graveboards-postgres",
-  "version": 1
+  "version": 2
 }

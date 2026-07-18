@@ -5,7 +5,7 @@
         "builtIn": 0,
         "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
         "enable": true,
-        "expr": "ALERTS{alertstate=\"firing\"}",
+        "expr": "count(ALERTS{alertstate=\"firing\"}) > 0",
         "hide": false,
         "iconColor": "red",
         "name": "Firing Alerts",
@@ -76,6 +76,14 @@
       ],
       "title": "CPU Used %",
       "description": "Host CPU utilization. Amber >70%, red >90%.",
+      "links": [
+        {
+          "title": "View Platform Overview",
+          "url": "/d/graveboards-overview?from=${__from}&to=${__to}",
+          "targetBlank": false,
+          "type": "link"
+        }
+      ],
       "type": "stat"
     },
     {
@@ -103,6 +111,14 @@
           "values": false
         }
       },
+      "links": [
+        {
+          "title": "View Platform Overview",
+          "url": "/d/graveboards-overview?from=${__from}&to=${__to}",
+          "targetBlank": false,
+          "type": "link"
+        }
+      ],
       "targets": [
         {
           "expr": "(1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100",
@@ -139,6 +155,14 @@
           "values": false
         }
       },
+      "links": [
+        {
+          "title": "View Platform Overview",
+          "url": "/d/graveboards-overview?from=${__from}&to=${__to}",
+          "targetBlank": false,
+          "type": "link"
+        }
+      ],
       "targets": [
         {
           "expr": "100 - node_filesystem_avail_bytes{mountpoint=\"/\"} / node_filesystem_size_bytes{mountpoint=\"/\"} * 100",
@@ -167,6 +191,14 @@
           "values": false
         }
       },
+      "links": [
+        {
+          "title": "View Platform Overview",
+          "url": "/d/graveboards-overview?from=${__from}&to=${__to}",
+          "targetBlank": false,
+          "type": "link"
+        }
+      ],
       "targets": [
         {
           "expr": "node_load1",
@@ -175,7 +207,7 @@
         }
       ],
       "title": "Load Average (1m)",
-      "description": "1-minute load average. Annotate with core count for context.",
+      "description": "1-minute load average. Compare against CPU core count: value > cores means the system is overloaded.",
       "type": "stat"
     },
     {
@@ -253,6 +285,7 @@
         }
       ],
       "title": "CPU by Mode",
+      "description": "CPU time broken down by mode: user (application), system (kernel), iowait (waiting on disk), idle, irq, and softirq. High iowait indicates disk bottleneck.",
       "type": "timeseries"
     },
     {
@@ -295,6 +328,7 @@
         }
       ],
       "title": "Load Average 1 / 5 / 15",
+      "description": "1-minute, 5-minute, and 15-minute load averages. Divergence between short and long-term (e.g., 1m >> 15m) signals a recent spike.",
       "type": "timeseries"
     },
     {
@@ -362,6 +396,7 @@
         }
       ],
       "title": "Memory Breakdown",
+      "description": "Memory usage stacked: used (application), cached (page cache), buffers (kernel buffers), and free. Linux uses unused memory for caching — cached memory is reclaimable.",
       "type": "timeseries"
     },
     {
@@ -412,11 +447,112 @@
         }
       ],
       "title": "Disk I/O",
+      "description": "Disk byte throughput: read and written, in bytes per second. Pair with Disk IOPS below to distinguish large sequential I/O from many small random I/Os.",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "lineWidth": 1,
+            "pointSize": 4,
+            "showPoints": "auto"
+          },
+          "unit": "iops"
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 23 },
+      "id": 26,
+      "links": [
+        {
+          "title": "View PostgreSQL",
+          "url": "/d/graveboards-postgres?from=${__from}&to=${__to}",
+          "targetBlank": false,
+          "type": "link"
+        },
+        {
+          "title": "View Redis",
+          "url": "/d/graveboards-redis?from=${__from}&to=${__to}",
+          "targetBlank": false,
+          "type": "link"
+        },
+        {
+          "title": "View Logs",
+          "url": "/d/graveboards-logs?var-service=backend&from=${__from}&to=${__to}",
+          "targetBlank": false,
+          "type": "link"
+        }
+      ],
+      "targets": [
+        {
+          "expr": "rate(node_disk_reads_completed_total[5m])",
+          "legendFormat": "reads",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(node_disk_writes_completed_total[5m])",
+          "legendFormat": "writes",
+          "refId": "B"
+        }
+      ],
+      "title": "Disk IOPS",
+      "description": "Disk I/O operations per second. Useful for spotting Postgres-driven disk pressure that byte-throughput alone can hide (many small random I/Os vs few large sequential ones).",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "lineWidth": 1,
+            "pointSize": 4,
+            "showPoints": "auto"
+          },
+          "unit": "ops"
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 23 },
+      "id": 27,
+      "links": [
+        {
+          "title": "View Logs",
+          "url": "/d/graveboards-logs?var-service=backend&from=${__from}&to=${__to}",
+          "targetBlank": false,
+          "type": "link"
+        }
+      ],
+      "targets": [
+        {
+          "expr": "rate(node_network_receive_errs_total[5m])",
+          "legendFormat": "receive errs",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(node_network_transmit_errs_total[5m])",
+          "legendFormat": "transmit errs",
+          "refId": "B"
+        },
+        {
+          "expr": "rate(node_network_receive_drop_total[5m])",
+          "legendFormat": "receive drops",
+          "refId": "C"
+        },
+        {
+          "expr": "rate(node_network_transmit_drop_total[5m])",
+          "legendFormat": "transmit drops",
+          "refId": "D"
+        }
+      ],
+      "title": "Network Errors / Drops",
+      "description": "Near-zero baseline; a real signal when nonzero. Indicates network stack or hardware issues.",
       "type": "timeseries"
     },
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 23 },
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 31 },
       "id": 12,
       "title": "Filesystem & Network",
       "type": "row"
@@ -442,7 +578,7 @@
           "unit": "percent"
         }
       },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 32 },
       "id": 13,
       "links": [
         {
@@ -467,6 +603,7 @@
         }
       ],
       "title": "Filesystem Usage by Mount",
+      "description": "Disk usage per mount point. Amber >75%, red >90%. Excludes /proc.",
       "type": "stat"
     },
     {
@@ -482,7 +619,7 @@
           "unit": "Bps"
         }
       },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 32 },
       "id": 14,
       "links": [
         {
@@ -505,11 +642,12 @@
         }
       ],
       "title": "Network Throughput",
+      "description": "Network byte throughput: received and transmitted, in bytes per second.",
       "type": "timeseries"
     },
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 32 },
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 40 },
       "id": 15,
       "title": "Backend Process",
       "type": "row"
@@ -530,7 +668,7 @@
           "unit": "percent"
         }
       },
-      "gridPos": { "h": 6, "w": 8, "x": 0, "y": 33 },
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 41 },
       "id": 16,
       "links": [
         {
@@ -548,6 +686,7 @@
         }
       ],
       "title": "Process CPU %",
+      "description": "Backend process CPU usage. Amber >50%, red >80%.",
       "type": "stat"
     },
     {
@@ -563,7 +702,7 @@
           "unit": "bytes"
         }
       },
-      "gridPos": { "h": 6, "w": 8, "x": 8, "y": 33 },
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 41 },
       "id": 17,
       "links": [
         {
@@ -586,7 +725,44 @@
         }
       ],
       "title": "Process Memory (RSS / Virtual)",
+      "description": "Backend process memory: RSS (actual physical memory used) and virtual (address space mapped, including shared libraries and unused mappings).",
       "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "amber", "value": 1 },
+              { "color": "red", "value": 3 }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": { "h": 6, "w": 6, "x": 12, "y": 41 },
+      "id": 28,
+      "options": {
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "expr": "changes(process_start_time_seconds[24h])",
+          "legendFormat": "Restarts",
+          "refId": "A"
+        }
+      ],
+      "title": "Process Restarts (24h)",
+      "description": "Number of process restarts in the last 24 hours. Catches silent crash-loops that up alone won't (a fast-restarting process can still read as up at scrape time). Amber >=1, red >=3.",
+      "type": "stat"
     },
     {
       "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
@@ -596,7 +772,7 @@
           "unit": "dtdurations"
         }
       },
-      "gridPos": { "h": 6, "w": 8, "x": 16, "y": 33 },
+      "gridPos": { "h": 6, "w": 6, "x": 18, "y": 41 },
       "id": 18,
       "links": [
         {
@@ -621,6 +797,7 @@
         }
       ],
       "title": "Process Uptime",
+      "description": "How long the backend process has been running. Pair with Process Restarts (24h) — increasing uptime with zero restarts is healthy.",
       "type": "stat"
     }
   ],
@@ -665,5 +842,5 @@
   "timezone": "",
   "title": "Host / System",
   "uid": "graveboards-host",
-  "version": 1
+  "version": 2
 }

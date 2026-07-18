@@ -79,6 +79,14 @@
       ],
       "title": "Daemon Services",
       "description": "Service running status. Green = running, red = stopped.",
+      "links": [
+        {
+          "title": "View Platform Overview",
+          "url": "/d/graveboards-overview?from=${__from}&to=${__to}",
+          "targetBlank": false,
+          "type": "link"
+        }
+      ],
       "type": "stat"
     },
     {
@@ -139,6 +147,7 @@
         }
       ],
       "title": "Job Rate by Service & Status",
+      "description": "Job completion rate by service and status (success, failure, critical). Green = success, red = failure, dark-red = critical.",
       "type": "timeseries"
     },
     {
@@ -209,12 +218,18 @@
       ],
       "targets": [
         {
+          "expr": "histogram_quantile(0.50, sum(rate(daemon_job_duration_seconds_bucket[5m])) by (le, service))",
+          "legendFormat": "{{service}} p50",
+          "refId": "A"
+        },
+        {
           "expr": "histogram_quantile(0.95, sum(rate(daemon_job_duration_seconds_bucket[5m])) by (le, service))",
           "legendFormat": "{{service}} p95",
-          "refId": "A"
+          "refId": "B"
         }
       ],
-      "title": "Job Duration p95 by Service",
+      "title": "Job Duration p50 / p95 by Service",
+      "description": "50th and 95th percentile job duration by service. Spikes indicate slow jobs or downstream bottlenecks.",
       "type": "timeseries"
     },
     {
@@ -329,6 +344,7 @@
         }
       ],
       "title": "Cumulative Jobs by Status",
+      "description": "Total jobs processed since startup, grouped by service and status (success, failure, critical). Useful for spotting accumulating failures.",
       "type": "table"
     }
   ],

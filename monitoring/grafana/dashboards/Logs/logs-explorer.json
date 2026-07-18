@@ -5,7 +5,7 @@
         "builtIn": 0,
         "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
         "enable": true,
-        "expr": "ALERTS{alertstate=\"firing\"}",
+        "expr": "count(ALERTS{alertstate=\"firing\"}) > 0",
         "hide": false,
         "iconColor": "red",
         "name": "Firing Alerts",
@@ -74,7 +74,7 @@
         }
       ],
       "title": "Error Count",
-      "description": "Total error-level log lines in the selected range.",
+      "description": "Total error-level log lines in the selected time range. Amber >10, red >50.",
       "type": "stat"
     },
     {
@@ -109,7 +109,7 @@
         }
       ],
       "title": "Warning Count",
-      "description": "Total warning-level log lines. 0 = none emitted (not necessarily broken).",
+      "description": "Total warning-level log lines in the selected time range. Amber >5, red >20. Zero means no warnings were emitted.",
       "type": "stat"
     },
     {
@@ -137,6 +137,7 @@
         }
       ],
       "title": "Total Log Rate",
+      "description": "Rate of all log lines across all levels and services, in logs per second.",
       "type": "stat"
     },
     {
@@ -265,19 +266,136 @@
         }
       ],
       "title": "Errors by Logger",
-      "description": "Top 10 loggers by error count. Grouped by the `logger` JSON field.",
+      "description": "Top 10 loggers by error count, grouped by the `logger` JSON field. Inverted thresholds: red = no errors, amber = some errors, green = many errors (healthy logger activity).",
       "type": "bargauge"
     },
     {
       "collapsed": false,
       "gridPos": { "h": 1, "w": 24, "x": 0, "y": 14 },
+      "id": 24,
+      "title": "Error Types",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "loki", "uid": "${datasource_loki}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "fixed" },
+          "custom": {
+            "align": "auto",
+            "displayMode": "color-background",
+            "inspect": false
+          }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "exception" },
+            "properties": [
+              {
+                "id": "custom.displayMode",
+                "value": "color-text"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 15 },
+      "id": 25,
+      "links": [
+        {
+          "title": "View full log stream",
+          "url": "/d/graveboards-logs?var-service=backend&var-level=error&from=${__from}&to=${__to}",
+          "targetBlank": false,
+          "type": "link"
+        }
+      ],
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          { "desc": true, "displayName": "Count" }
+        ]
+      },
+      "targets": [
+        {
+          "expr": "topk(10, sum(count_over_time({service=~\"$service\", level=\"error\"} | json | exception=~\".*\" [$__range])) by (exception))",
+          "legendFormat": "{{exception}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Errors by Exception Type",
+      "description": "Top 10 exception types from error-level logs. Based on the `exception` field emitted by structlog's format_exc_info processor.",
+      "type": "table"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "fixed" },
+          "custom": {
+            "lineWidth": 1,
+            "pointSize": 4,
+            "showPoints": "auto"
+          },
+          "unit": "ops"
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "bad_request" },
+            "properties": [
+              { "id": "color", "value": { "fixedColor": "#EAB839", "mode": "fixed" } }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "internal_server_error" },
+            "properties": [
+              { "id": "color", "value": { "fixedColor": "#F2495C", "mode": "fixed" } }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "forbidden" },
+            "properties": [
+              { "id": "color", "value": { "fixedColor": "#FF9830", "mode": "fixed" } }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "unauthorized" },
+            "properties": [
+              { "id": "color", "value": { "fixedColor": "#F2CC04", "mode": "fixed" } }
+            ]
+          }
+        ]
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 15 },
+      "id": 26,
+      "links": [
+        {
+          "title": "View API & Requests",
+          "url": "/d/graveboards-api?from=${__from}&to=${__to}",
+          "targetBlank": false,
+          "type": "link"
+        }
+      ],
+      "targets": [
+        {
+          "expr": "job:errors_by_type:rate5m",
+          "legendFormat": "{{error_type}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Error Rate by Type (Metric Correlation)",
+      "description": "Correlates with the errors_total metric. See API & Requests → Errors for the full breakdown.",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 22 },
       "id": 9,
       "title": "Log Stream",
       "type": "row"
     },
     {
       "datasource": { "type": "loki", "uid": "${datasource_loki}" },
-      "gridPos": { "h": 16, "w": 24, "x": 0, "y": 15 },
+      "gridPos": { "h": 16, "w": 24, "x": 0, "y": 23 },
       "id": 10,
       "options": {
         "dedupStrategy": "none",
@@ -304,8 +422,42 @@
     },
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 31 },
-      "id": 15,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 52 },
+      "id": 27,
+      "title": "Search",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "loki", "uid": "${datasource_loki}" },
+      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 53 },
+      "id": 28,
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": true,
+        "showTime": true,
+        "showLabels": false,
+        "showCommonLabels": false,
+        "enableLogDetailsOpenClose": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending",
+        "timestampFormat": "2006-01-02 15:04:05"
+      },
+      "targets": [
+        {
+          "expr": "{service=~\"$service\"} | json | logger=~\"app.search.*\" | request_id=~\"$request_id\" |= \"$search\"",
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ],
+      "title": "Search Request Stream",
+      "description": "Search-related log lines. Filter by request_id to trace a single search through validation, caching, and query execution.",
+      "type": "logs"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 39 },
+      "id": 29,
       "title": "API Requests",
       "type": "row"
     },
@@ -316,7 +468,7 @@
           "color": { "mode": "palette-classic" }
         }
       },
-      "gridPos": { "h": 10, "w": 8, "x": 0, "y": 32 },
+      "gridPos": { "h": 10, "w": 8, "x": 0, "y": 40 },
       "id": 16,
       "options": {
         "orientation": "horizontal",
@@ -341,7 +493,7 @@
     },
     {
       "datasource": { "type": "loki", "uid": "${datasource_loki}" },
-      "gridPos": { "h": 10, "w": 16, "x": 8, "y": 32 },
+      "gridPos": { "h": 10, "w": 16, "x": 8, "y": 40 },
       "id": 17,
       "options": {
         "dedupStrategy": "none",
@@ -368,14 +520,48 @@
     },
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 42 },
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 63 },
+      "id": 30,
+      "title": "Daemon Services",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "loki", "uid": "${datasource_loki}" },
+      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 64 },
+      "id": 31,
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": true,
+        "showTime": true,
+        "showLabels": false,
+        "showCommonLabels": false,
+        "enableLogDetailsOpenClose": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending",
+        "timestampFormat": "2006-01-02 15:04:05"
+      },
+      "targets": [
+        {
+          "expr": "{service=~\"$service\"} | json | logger=~\"app.daemon.*\" | request_id=~\"$request_id\" |= \"$search\"",
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ],
+      "title": "Daemon Service Stream",
+      "description": "Log lines from daemon services (profile_fetcher, score_fetcher, rule_validation, queue_request_handler, etc.). Filter by request_id to trace individual jobs.",
+      "type": "logs"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 76 },
       "id": 21,
       "title": "Audit",
       "type": "row"
     },
     {
       "datasource": { "type": "loki", "uid": "${datasource_loki}" },
-      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 43 },
+      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 77 },
       "id": 22,
       "options": {
         "dedupStrategy": "none",
@@ -402,14 +588,14 @@
     },
     {
       "collapsed": true,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 55 },
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 89 },
       "id": 18,
       "title": "Infrastructure & Stack",
       "type": "row"
     },
     {
       "datasource": { "type": "loki", "uid": "${datasource_loki}" },
-      "gridPos": { "h": 12, "w": 12, "x": 0, "y": 56 },
+      "gridPos": { "h": 12, "w": 12, "x": 0, "y": 90 },
       "id": 19,
       "options": {
         "dedupStrategy": "none",
@@ -436,7 +622,7 @@
     },
     {
       "datasource": { "type": "loki", "uid": "${datasource_loki}" },
-      "gridPos": { "h": 12, "w": 12, "x": 12, "y": 56 },
+      "gridPos": { "h": 12, "w": 12, "x": 12, "y": 90 },
       "id": 20,
       "options": {
         "dedupStrategy": "none",
@@ -589,5 +775,5 @@
   "timezone": "",
   "title": "Logs Explorer",
   "uid": "graveboards-logs",
-  "version": 1
+  "version": 2
 }
