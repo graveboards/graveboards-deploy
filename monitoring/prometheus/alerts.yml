@@ -187,3 +187,93 @@ groups:
             annotations:
                 summary: "High rate limit block rate (>10%)"
                 description: "More than 10% of requests are being rate limited."
+
+          - alert: ErrorRateHigh
+            expr: job:errors:rate5m > 1
+            for: 5m
+            labels:
+                severity: warning
+            annotations:
+                summary: "Elevated application error rate"
+                description: "errors_total is firing at more than 1/s for 5 minutes — check Errors row on API & Requests."
+
+          - alert: NewErrorTypeAppeared
+            expr: count(count by (error_type) (errors_total)) > count(count by (error_type) (errors_total offset 1h))
+            for: 0m
+            labels:
+                severity: info
+            annotations:
+                summary: "A new error_type has appeared in the last hour"
+                description: "The distinct error_type cardinality on errors_total increased — check for a new failure mode."
+
+          - alert: SearchHighLatency
+            expr: job:search_duration:p95_5m > 2
+            for: 10m
+            labels:
+                severity: warning
+            annotations:
+                summary: "Search p95 latency high for scope {{ $labels.scope }}"
+                description: "Search queries for scope {{ $labels.scope }} have exceeded 2s p95 for 10 minutes."
+
+          - alert: OsuApiErrorTypeRatioHigh
+            expr: job:osu_api_errors:ratio5m > 0.2
+            for: 10m
+            labels:
+                severity: warning
+            annotations:
+                summary: "osu! API structured error ratio high"
+                description: "More than 20% of osu! API calls are producing structured errors (osu_api_errors_total) over 10 minutes — complements OSUAPIDown."
+
+          - alert: RateLimitRetryStorm
+            expr: job:rate_limit_retries:rate5m > 5
+            for: 5m
+            labels:
+                severity: warning
+            annotations:
+                summary: "High osu! API rate-limit retry rate for {{ $labels.endpoint }}"
+                description: "Graveboards is retrying rate-limited osu! API calls frequently — the app may be throttled by osu!."
+
+          - alert: HighClientErrorRate
+            expr: job:http_requests_4xx:ratio5m > 0.25
+            for: 10m
+            labels:
+                severity: info
+            annotations:
+                summary: "High 4xx rate (>25%)"
+                description: "A quarter of requests are client errors — could indicate API misuse, a bad client release, or a broken integration."
+
+          - alert: PostgresCacheHitRatioLow
+            expr: job:pg_cache:hit_ratio5m < 0.90
+            for: 15m
+            labels:
+                severity: warning
+            annotations:
+                summary: "Postgres buffer cache hit ratio low"
+                description: "Cache hit ratio has been below 90% for 15 minutes — may indicate memory pressure or a query regression."
+
+          - alert: RedisEvictionsSpike
+            expr: rate(redis_evicted_keys_total[5m]) > 0
+            for: 5m
+            labels:
+                severity: warning
+            annotations:
+                summary: "Redis is evicting keys"
+                description: "Redis has evicted keys in the last 5 minutes — check maxmemory policy and memory headroom."
+
+          - alert: AuthLockoutSpike
+            expr: job:auth_rate_limit:lockout_rate5m > 0.1
+            for: 5m
+            labels:
+                severity: warning
+            annotations:
+                summary: "Elevated auth lockout rate"
+                description: "IPs are being locked out for auth failures faster than usual — possible credential-stuffing or brute-force attempt."
+
+          - alert: DaemonJobCriticalFailureRate
+            expr: sum(rate(daemon_jobs_total{status="critical"}[10m])) by (service) > 0
+            for: 5m
+            labels:
+                severity: critical
+            annotations:
+                summary: "Critical daemon job failures for {{ $labels.service }}"
+                description: "{{ $labels.service }} has recorded critical-severity job failures in the last 10 minutes."

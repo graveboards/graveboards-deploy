@@ -27,3 +27,39 @@ groups:
                 sum(rate(pg_stat_database_blks_hit[5m]))
                 /
                 (sum(rate(pg_stat_database_blks_hit[5m])) + sum(rate(pg_stat_database_blks_read[5m])))
+
+          - record: job:errors:rate5m
+            expr: sum(rate(errors_total[5m]))
+
+          - record: job:errors_by_type:rate5m
+            expr: sum(rate(errors_total[5m])) by (error_type)
+
+          - record: job:search_requests:rate5m
+            expr: sum(rate(search_requests_total[5m])) by (scope)
+
+          - record: job:search_duration:p95_5m
+            expr: histogram_quantile(0.95, sum(rate(search_duration_seconds_bucket[5m])) by (le, scope))
+
+          - record: job:search_cache:hit_ratio5m
+            expr: >
+                sum(rate(search_cache_hits_total[5m])) by (scope)
+                /
+                (sum(rate(search_cache_hits_total[5m])) by (scope) + sum(rate(search_cache_misses_total[5m])) by (scope))
+
+          - record: job:osu_api_errors:ratio5m
+            expr: >
+                sum(rate(osu_api_errors_total[5m]))
+                /
+                sum(rate(osu_api_requests_total[5m]))
+
+          - record: job:rate_limit_retries:rate5m
+            expr: sum(rate(rate_limit_retries_total[5m])) by (endpoint)
+
+          - record: job:http_requests_4xx:ratio5m
+            expr: >
+                sum(rate(http_requests_total{status_code=~"4.."}[5m]))
+                /
+                sum(rate(http_requests_total[5m]))
+
+          - record: job:auth_rate_limit:lockout_rate5m
+            expr: sum(rate(auth_lockouts_total[5m]))
