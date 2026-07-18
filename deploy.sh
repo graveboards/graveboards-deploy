@@ -375,7 +375,6 @@ generate_config_files() {
         echo "initial_roles:"
         echo "  - admin"
         echo "setup_steps:"
-        echo "  - create_database"
         echo "  - seed_roles"
         echo "  - seed_users"
         echo "  - seed_api_keys"
@@ -402,7 +401,6 @@ initial_users:
 initial_roles:
   - admin
 setup_steps:
-  - create_database
   - seed_roles
   - seed_users
   - seed_api_keys
