@@ -85,7 +85,10 @@ services:
         env_file:
             - ../graveboards-backend/.env.test
         volumes:
-            - instance-test-data:/app/instance
+            - type: tmpfs
+              target: /app/instance
+              tmpfs:
+                size: 104857600
         networks:
             - app
         environment:
@@ -113,7 +116,6 @@ services:
 volumes:
     postgresql-test-data:
     redis-test-data:
-    instance-test-data:
 
 networks:
     app:
