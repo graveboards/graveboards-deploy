@@ -4,6 +4,7 @@
 # Creates automated backups of PostgreSQL database, Grafana dashboards, and Alertmanager silences
 # Usage: backup.sh [backup_directory]
 #   If backup_directory is not provided, defaults to ./backups next to this script.
+#   Each backup type is written to its own subdirectory: postgresql/, grafana/, alertmanager/
 #
 # Backups include:
 #   - PostgreSQL database (primary, kept with rotation)
@@ -15,14 +16,18 @@
 # If retention matters, add separate backups for prometheus-data and loki-data volumes.
 
 set -e
+set -o pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKUP_DIR="${1:-${SCRIPT_DIR}/backups}"
 DATE=$(date +%Y-%m-%d_%H-%M-%S)
 BACKUP_FILE="graveboards_${DATE}.sql.gz"
 MAX_BACKUPS=7
-GRAFANA_BACKUP_DIR="${BACKUP_DIR}/grafana_${DATE}"
-ALERTMANAGER_BACKUP_FILE="${BACKUP_DIR}/alertmanager-silences_${DATE}.json"
+POSTGRESQL_BACKUP_DIR="${BACKUP_DIR}/postgresql"
+GRAFANA_BASE_DIR="${BACKUP_DIR}/grafana"
+GRAFANA_BACKUP_DIR="${GRAFANA_BASE_DIR}/grafana_${DATE}"
+ALERTMANAGER_BASE_DIR="${BACKUP_DIR}/alertmanager"
+ALERTMANAGER_BACKUP_FILE="${ALERTMANAGER_BASE_DIR}/alertmanager-silences_${DATE}.json"
 
 # Colors
 ColorInfo="\033[1;36m"
@@ -54,8 +59,9 @@ if [[ -z "${POSTGRESQL_DATABASE}" ]]; then
 fi
 
 # Create backup directories
-mkdir -p "${BACKUP_DIR}"
+mkdir -p "${POSTGRESQL_BACKUP_DIR}"
 mkdir -p "${GRAFANA_BACKUP_DIR}"
+mkdir -p "${ALERTMANAGER_BASE_DIR}"
 
 # Get Docker Compose network name dynamically
 COMPOSE_NETWORK=$(docker network ls --filter name=graveboards --format "{{.Name}}" 2>/dev/null | head -n1)
@@ -68,15 +74,15 @@ fi
 # =========================
 
 write_info "Creating database backup: ${BACKUP_FILE}"
-write_info "Backup directory: ${BACKUP_DIR}"
+write_info "Backup directory: ${POSTGRESQL_BACKUP_DIR}"
 
 docker run --rm \
     --network "${COMPOSE_NETWORK}" \
     -e PGPASSWORD="${POSTGRESQL_PASSWORD}" \
     postgres:16-alpine \
-    pg_dump -h graveboards-postgresql -U postgres -d "${POSTGRESQL_DATABASE}" | gzip > "${BACKUP_DIR}/${BACKUP_FILE}"
+    pg_dump -h graveboards-postgresql -U postgres -d "${POSTGRESQL_DATABASE}" | gzip > "${POSTGRESQL_BACKUP_DIR}/${BACKUP_FILE}"
 
-write_success "Database backup created: ${BACKUP_DIR}/${BACKUP_FILE}"
+write_success "Database backup created: ${POSTGRESQL_BACKUP_DIR}/${BACKUP_FILE}"
 
 # =========================
 # Backup Grafana (dashboards + datasources)
@@ -89,28 +95,31 @@ GRAFANA_PASS="${GRAFANA_ADMIN_PASSWORD:-admin}"
 
 # Export datasources
 docker run --rm \
+    --user root \
     --network "${COMPOSE_NETWORK}" \
     -v "${GRAFANA_BACKUP_DIR}:/backup" \
     curlimages/curl:latest \
-    sh -c "curl -s -u ${GRAFANA_USER}:${GRAFANA_PASS} http://graveboards-grafana:3000/api/datasources > /backup/datasources.json" 2>/dev/null && \
+    sh -c "curl -sf -u ${GRAFANA_USER}:${GRAFANA_PASS} http://graveboards-grafana:3000/api/datasources > /backup/datasources.json" && \
     write_success "Grafana datasources exported" || \
     write_warning "Could not export Grafana datasources (Grafana may not be running)"
 
 # Export folders
 docker run --rm \
+    --user root \
     --network "${COMPOSE_NETWORK}" \
     -v "${GRAFANA_BACKUP_DIR}:/backup" \
     curlimages/curl:latest \
-    sh -c "curl -s -u ${GRAFANA_USER}:${GRAFANA_PASS} http://graveboards-grafana:3000/api/folders > /backup/folders.json" 2>/dev/null && \
+    sh -c "curl -sf -u ${GRAFANA_USER}:${GRAFANA_PASS} http://graveboards-grafana:3000/api/folders > /backup/folders.json" && \
     write_success "Grafana folders exported" || \
     write_warning "Could not export Grafana folders (Grafana may not be running)"
 
 # Export dashboards (search all)
 docker run --rm \
+    --user root \
     --network "${COMPOSE_NETWORK}" \
     -v "${GRAFANA_BACKUP_DIR}:/backup" \
     curlimages/curl:latest \
-    sh -c "curl -s -u ${GRAFANA_USER}:${GRAFANA_PASS} 'http://graveboards-grafana:3000/api/search?limit=1000' > /backup/dashboards-search.json" 2>/dev/null && \
+    sh -c "curl -sf -u ${GRAFANA_USER}:${GRAFANA_PASS} 'http://graveboards-grafana:3000/api/search?limit=1000' > /backup/dashboards-search.json" && \
     write_success "Grafana dashboard index exported" || \
     write_warning "Could not export Grafana dashboard index (Grafana may not be running)"
 
@@ -121,10 +130,11 @@ docker run --rm \
 write_info "Backing up Alertmanager silences..."
 
 docker run --rm \
+    --user root \
     --network "${COMPOSE_NETWORK}" \
-    -v "${BACKUP_DIR}:/backup" \
+    -v "${ALERTMANAGER_BASE_DIR}:/backup" \
     curlimages/curl:latest \
-    sh -c "curl -s http://graveboards-alertmanager:9093/api/v2/silences > /backup/alertmanager-silences.json" 2>/dev/null && \
+    sh -c "curl -sf http://graveboards-alertmanager:9093/api/v2/silences > /backup/$(basename "${ALERTMANAGER_BACKUP_FILE}")" && \
     write_success "Alertmanager silences exported" || \
     write_warning "Could not export Alertmanager silences (Alertmanager may not be running)"
 
@@ -137,7 +147,7 @@ write_info "Keeping only the most recent ${MAX_BACKUPS} database backups..."
 old_backups=()
 while IFS= read -r line; do
     old_backups+=("$line")
-done < <(ls -1t "${BACKUP_DIR}"/graveboards_*.sql.gz 2>/dev/null | tail -n +$((MAX_BACKUPS + 1)))
+done < <(ls -1t "${POSTGRESQL_BACKUP_DIR}"/graveboards_*.sql.gz 2>/dev/null | tail -n +$((MAX_BACKUPS + 1)))
 
 if [[ ${#old_backups[@]} -gt 0 ]]; then
     for old_backup in "${old_backups[@]}"; do
@@ -158,7 +168,7 @@ write_info "Keeping only the most recent ${MAX_BACKUPS} Grafana/Alertmanager bac
 old_grafana=()
 while IFS= read -r line; do
     old_grafana+=("$line")
-done < <(ls -1dt "${BACKUP_DIR}"/grafana_*/ 2>/dev/null | tail -n +$((MAX_BACKUPS + 1)))
+done < <(ls -1dt "${GRAFANA_BASE_DIR}"/grafana_*/ 2>/dev/null | tail -n +$((MAX_BACKUPS + 1)))
 
 if [[ ${#old_grafana[@]} -gt 0 ]]; then
     for old in "${old_grafana[@]}"; do
@@ -170,7 +180,7 @@ fi
 old_am=()
 while IFS= read -r line; do
     old_am+=("$line")
-done < <(ls -1t "${BACKUP_DIR}"/alertmanager-silences_*.json 2>/dev/null | tail -n +$((MAX_BACKUPS + 1)))
+done < <(ls -1t "${ALERTMANAGER_BASE_DIR}"/alertmanager-silences_*.json 2>/dev/null | tail -n +$((MAX_BACKUPS + 1)))
 
 if [[ ${#old_am[@]} -gt 0 ]]; then
     for old in "${old_am[@]}"; do
@@ -183,9 +193,9 @@ fi
 # Verification
 # =========================
 
-if [[ -f "${BACKUP_DIR}/${BACKUP_FILE}" ]]; then
+if [[ -f "${POSTGRESQL_BACKUP_DIR}/${BACKUP_FILE}" ]]; then
     write_success "Backup verification passed"
-    ls -lh "${BACKUP_DIR}/${BACKUP_FILE}"
+    ls -lh "${POSTGRESQL_BACKUP_DIR}/${BACKUP_FILE}"
 else
     write_error "Backup verification failed"
     exit 1
