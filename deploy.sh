@@ -296,6 +296,19 @@ generate_config_files() {
         *) DISABLE_SECURITY="false" ;;
     esac
 
+    local DEV_ADMIN_USER_ID="1"
+    local DEV_USER_ID="2"
+    if [[ "$DISABLE_SECURITY" == "true" ]]; then
+        echo
+        echo "With security disabled, requests are attributed to a seeded dev identity"
+        echo "instead of a real login. Pass header 'X-Debug-User-Id' to impersonate a"
+        echo "different user (e.g. the regular-user ID below) to test non-admin behavior."
+        read -p "Dev admin user ID (default identity, used when no header is sent) [1]: " dev_admin_input
+        DEV_ADMIN_USER_ID="${dev_admin_input:-1}"
+        read -p "Dev regular (non-admin) user ID [2]: " dev_user_input
+        DEV_USER_ID="${dev_user_input:-2}"
+    fi
+
     local MASTER_QUEUE_NAME
     read -p "Master queue name [Graveboards Queue]: " MASTER_QUEUE_NAME
     MASTER_QUEUE_NAME="${MASTER_QUEUE_NAME:-Graveboards Queue}"
@@ -377,6 +390,7 @@ generate_config_files() {
         echo "setup_steps:"
         echo "  - seed_roles"
         echo "  - seed_users"
+        echo "  - seed_dev_identities"
         echo "  - seed_api_keys"
         echo "  - seed_queues"
     })
@@ -411,6 +425,8 @@ EOF
     write_config_file "$BACKEND_DIR/.env" <<EOF
 DEBUG=true
 DISABLE_SECURITY=$DISABLE_SECURITY
+DEV_ADMIN_USER_ID=$DEV_ADMIN_USER_ID
+DEV_USER_ID=$DEV_USER_ID
 ENV=dev
 BASE_URL=http://localhost:3000
 JWT_SECRET_KEY=$JWT_SECRET_KEY
@@ -459,6 +475,8 @@ EOF
 # BACKEND
 DEBUG=true
 DISABLE_SECURITY=$DISABLE_SECURITY
+DEV_ADMIN_USER_ID=$DEV_ADMIN_USER_ID
+DEV_USER_ID=$DEV_USER_ID
 ENV=dev
 BASE_URL=http://localhost:3000
 JWT_SECRET_KEY=$JWT_SECRET_KEY

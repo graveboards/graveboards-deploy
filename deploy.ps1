@@ -352,6 +352,19 @@ function Generate-ConfigFiles {
         $DISABLE_SECURITY = "false"
     }
 
+    $DEV_ADMIN_USER_ID = "1"
+    $DEV_USER_ID = "2"
+    if ($DISABLE_SECURITY -eq "true") {
+        Write-Host ""
+        Write-Host "With security disabled, requests are attributed to a seeded dev identity"
+        Write-Host "instead of a real login. Pass header 'X-Debug-User-Id' to impersonate a"
+        Write-Host "different user (e.g. the regular-user ID below) to test non-admin behavior."
+        $devAdminInput = Read-Host "Dev admin user ID (default identity, used when no header is sent) [1]"
+        if ($devAdminInput) { $DEV_ADMIN_USER_ID = $devAdminInput }
+        $devUserInput = Read-Host "Dev regular (non-admin) user ID [2]"
+        if ($devUserInput) { $DEV_USER_ID = $devUserInput }
+    }
+
     $MasterQueueName = Read-Host "Master queue name [Graveboards Queue]"
     if (-not $MasterQueueName) { $MasterQueueName = "Graveboards Queue" }
 
@@ -423,6 +436,7 @@ function Generate-ConfigFiles {
     $yamlLines += "setup_steps:"
     $yamlLines += "  - seed_roles"
     $yamlLines += "  - seed_users"
+    $yamlLines += "  - seed_dev_identities"
     $yamlLines += "  - seed_api_keys"
     $yamlLines += "  - seed_queues"
 
@@ -459,6 +473,8 @@ function Generate-ConfigFiles {
     $envDevContent = @"
 DEBUG=true
 DISABLE_SECURITY=$DISABLE_SECURITY
+DEV_ADMIN_USER_ID=$DEV_ADMIN_USER_ID
+DEV_USER_ID=$DEV_USER_ID
 ENV=dev
 BASE_URL=http://localhost:3000
 JWT_SECRET_KEY=$JwtSecretKey
@@ -511,6 +527,8 @@ REDIS_DB=15
 # BACKEND
 DEBUG=true
 DISABLE_SECURITY=$DISABLE_SECURITY
+DEV_ADMIN_USER_ID=$DEV_ADMIN_USER_ID
+DEV_USER_ID=$DEV_USER_ID
 ENV=dev
 BASE_URL=http://localhost:3000
 JWT_SECRET_KEY=$JwtSecretKey
