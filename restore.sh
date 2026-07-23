@@ -70,6 +70,17 @@ if [[ -z "${COMPOSE_NETWORK}" ]]; then
     COMPOSE_NETWORK="graveboards_app"
 fi
 
+# The restore needs the postgresql container itself up and reachable, so we
+# only stop the services that talk to the database (backend, frontend) and
+# leave postgresql/network alone. Taking the whole stack down here would
+# remove the very container this script connects to.
+APP_SERVICES=(graveboards-backend graveboards-frontend)
+
+if ! docker ps --format "{{.Names}}" | grep -qx "graveboards-postgresql"; then
+    write_error "graveboards-postgresql container is not running. Start the stack first (./deploy.sh up)."
+    exit 1
+fi
+
 write_warning "!!! RESTORING BACKUP WILL OVERWRITE EXISTING DATABASE !!!"
 echo ""
 echo "Backup file: ${BACKUP_FILE}"
@@ -87,25 +98,31 @@ if [[ "${BYPASS_CONFIRM}" != "true" ]]; then
     fi
 fi
 
-# Stop services
-write_info "Stopping Graveboards services..."
+# Stop app services that connect to the database (postgresql stays up)
+write_info "Stopping backend/frontend services..."
 cd "${SCRIPT_DIR}"
-./deploy.sh down
+docker stop "${APP_SERVICES[@]}" 2>/dev/null || true
 
 # Restore database
 write_info "Restoring database from backup..."
 
 if [[ "${COMPRESSION}" == "gzip" ]]; then
-    gunzip -c "${BACKUP_FILE}" | docker run --rm --network "${COMPOSE_NETWORK}" \
+    gunzip -c "${BACKUP_FILE}" | docker run --rm -i --network "${COMPOSE_NETWORK}" \
         -e PGPASSWORD="${POSTGRESQL_PASSWORD}" \
         postgres:16-alpine \
         psql -h graveboards-postgresql -U postgres -d "${POSTGRESQL_DATABASE}"
 else
-    docker run --rm --network "${COMPOSE_NETWORK}" \
+    docker run --rm -i --network "${COMPOSE_NETWORK}" \
         -e PGPASSWORD="${POSTGRESQL_PASSWORD}" \
         postgres:16-alpine \
         psql -h graveboards-postgresql -U postgres -d "${POSTGRESQL_DATABASE}" -f "${BACKUP_FILE}"
 fi
 
 write_success "Database restored successfully!"
+
+# Restart the services we stopped
+write_info "Restarting backend/frontend services..."
+docker start "${APP_SERVICES[@]}" 2>/dev/null || true
+
+write_success "Services restarted!"
 write_info "Verify the restoration by checking the service status"
