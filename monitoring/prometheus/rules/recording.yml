@@ -52,6 +52,9 @@ groups:
                 /
                 sum(rate(osu_api_requests_total[5m]))
 
+          - record: job:osu_api_rate_limited:rate5m
+            expr: sum(rate(osu_api_rate_limited_total[5m])) by (endpoint)
+
           - record: job:rate_limit_retries:rate5m
             expr: sum(rate(rate_limit_retries_total[5m])) by (endpoint)
 

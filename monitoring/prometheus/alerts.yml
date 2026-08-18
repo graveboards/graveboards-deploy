@@ -224,6 +224,15 @@ groups:
                 summary: "osu! API structured error ratio high"
                 description: "More than 20% of osu! API calls are producing structured errors (osu_api_errors_total) over 10 minutes — complements OSUAPIDown."
 
+          - alert: OsuApiRateLimited
+            expr: sum(rate(osu_api_rate_limited_total[5m])) > 0
+            for: 5m
+            labels:
+                severity: warning
+            annotations:
+                summary: "osu! API is rate limiting Graveboards"
+                description: "osu!'s API (or its CDN) has been answering with HTTP 429 for 5 minutes — the app is backing off. If this persists, the OAuth client (33835) may be blocked."
+
           - alert: RateLimitRetryStorm
             expr: job:rate_limit_retries:rate5m > 5
             for: 5m
