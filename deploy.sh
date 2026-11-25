@@ -145,6 +145,17 @@ compose() {
     "${COMPOSE_CMD[@]}" "${compose_files[@]}" "$@"
 }
 
+# Follow logs only when a human is watching. An unattended run (CI, nohup, piped
+# output) would otherwise block forever after the services are already up.
+follow_logs() {
+    if [[ ! -t 1 ]]; then
+        write_info "Not following logs (stdout is not a terminal)."
+        return 0
+    fi
+
+    "$@"
+}
+
 # =========================
 # Git helper functions
 # =========================
@@ -721,7 +732,7 @@ cmd_up() {
         if [[ "$Mode" != "test" ]]; then
             compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik"  "$MonitoringTraefik"  "$NoFrontend" up $BuildFlag -d "${ExtraServices[@]}"
             write_success "Services started!"
-            compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik"  "$MonitoringTraefik"  "$NoFrontend" logs -f "${ExtraServices[@]}"
+            follow_logs compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik"  "$MonitoringTraefik"  "$NoFrontend" logs -f "${ExtraServices[@]}"
         else
             compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik"  "$MonitoringTraefik"  "$NoFrontend" --profile test up --build "${ExtraServices[@]}"
         fi
@@ -864,7 +875,7 @@ cmd_deploy() {
     else
         compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik"  "$MonitoringTraefik"  "$NoFrontend" up -d
         write_success "Services started!"
-        compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik"  "$MonitoringTraefik"  "$NoFrontend" logs -f
+        follow_logs compose "$Mode" "$NoMonitoring" "$Nas" "$Traefik"  "$MonitoringTraefik"  "$NoFrontend" logs -f
     fi
 
     local deploy_text="deploy ${Mode} by $(whoami) @ $(date +%H:%M)"
